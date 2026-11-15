@@ -1,0 +1,24 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+import {randomUUID} from 'node:crypto';
+const db=new PGlite();
+await db.exec('create role anon; create role authenticated;');
+await db.exec(await fs.readFile(new URL('../database/001_friend_time.sql',import.meta.url),'utf8'));
+const token=()=>randomUUID()+randomUUID(), admin=token(), member=token(), id=randomUUID(), pid=randomUUID();
+const tomorrow=new Date();tomorrow.setUTCDate(tomorrow.getUTCDate()+2);const date=tomorrow.toISOString().slice(0,10);
+const lunch=date+'_lunch',dinner=date+'_dinner';
+async function api(action,data={},key='',eventId=id){const r=await db.query('select public.friend_time_api($1,$2,$3,$4) result',[action,eventId,key,JSON.stringify(data)]);return r.rows[0].result;}
+let doc;
+test('建立邀約，主揪自動計入；未填名單不計入',async()=>{doc=await api('create',{title:'測試聚餐',host:'主揪',type:'meal',times:{lunch:['12:00','14:00'],dinner:['18:00','21:00']},names:['朋友'],slots:[lunch]},admin);assert.equal(doc.people.length,2);assert.equal(doc.people[0].answers[lunch],true);assert.equal(doc.people[1].submitted,false);});
+test('匿名可讀取指定邀約，無法列舉底層資料表',async()=>{await db.exec('set role anon');assert.equal((await api('get')).title,'測試聚餐');await assert.rejects(db.query('select * from friend_time_private.events'),/permission denied/);await db.exec('reset role');});
+test('錯誤管理憑證拒絕追加日期',async()=>assert.rejects(api('append',{slots:[dinner]},member),/管理連結/));
+test('認領名單並回覆，同一名字不能被他人覆寫',async()=>{const existing=doc.people[1].id;doc=await api('respond',{pid:existing,name:'朋友',answers:{[lunch]:false}},member);assert.equal(doc.people[1].answers[lunch],false);await assert.rejects(api('respond',{pid:existing,name:'朋友',answers:{[lunch]:true}},token()),/修改連結/);});
+test('新增參加者與重複名字保護',async()=>{doc=await api('respond',{pid,name:'新增朋友',answers:{[lunch]:true}},member);assert.equal(doc.people.length,3);await assert.rejects(api('respond',{pid:randomUUID(),name:'新增朋友',answers:{[lunch]:true}},token()),/名字已存在/);});
+test('追加日期，原參加者新時段保持未確認',async()=>{doc=await api('append',{slots:[dinner]},admin);assert.equal(doc.people[0].answers[dinner],true);assert.equal(doc.people[1].answers[dinner],undefined);assert.equal(doc.people[2].answers[dinner],undefined);});
+test('過期版本回覆被拒絕，避免新增時段被默認可行',async()=>assert.rejects(api('respond',{pid,name:'新增朋友',answers:{[lunch]:true}},member),/候選時間已變更/));
+test('修改連結可補答；答案不包含憑證或雜湊',async()=>{doc=await api('respond',{pid,name:'新增朋友',answers:{[lunch]:true,[dinner]:false}},member);assert.equal(doc.people[2].answers[dinner],false);assert.equal(JSON.stringify(doc).includes(member),false);assert.equal('member_keys' in doc,false);});
+test('確定日期後禁止填寫，主揪可重新開放',async()=>{doc=await api('finalize',{slot:lunch},admin);assert.equal(doc.status,'final');await assert.rejects(api('respond',{pid,name:'新增朋友',answers:{[lunch]:true,[dinner]:true}},member),/已關閉/);assert.equal((await api('reopen',{},admin)).status,'open');});
+test('上課僅接受整天；SQL 特殊字元與 HTML 只當文字',async()=>{await assert.rejects(api('create',{title:'課程',host:'主揪',type:'class',times:{day:['09:00','17:00']},names:[],slots:[lunch]},token(),randomUUID()),/類型/);const d=await api('create',{title:"<script>alert('test')</script>",host:'老師',type:'class',times:{day:['09:00','17:00']},names:[],slots:[date+'_day']},token(),randomUUID());assert.equal(d.type,'class');});
+test.after(()=>db.close());

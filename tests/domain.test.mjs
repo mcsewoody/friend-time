@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {rankSlots,highlights,dateKey} from '../docs/domain.mjs';
+const slots=['2026-12-01_lunch','2026-12-01_dinner','2026-12-02_lunch','2026-12-03_lunch'];
+const person=(name,answers,submitted=true)=>({name,answers,submitted});
+const yes=Object.fromEntries(slots.map(s=>[s,true]));
+test('未回覆者不被當成可以，並保留待確認名單',()=>{const e={slots,people:[person('主揪',yes),person('朋友',{},false)]};const r=rankSlots(e);assert.equal(r[0].yes.length,1);assert.deepEqual(r[0].pending,['朋友']);assert.equal(r[0].common,true);});
+test('無交集時取人數最多前三名，同日午餐先於晚餐',()=>{const e={slots,people:[person('主揪',yes),person('甲',Object.fromEntries(slots.map((s,i)=>[s,i===0]))),person('乙',Object.fromEntries(slots.map((s,i)=>[s,i===1])))]};const h=highlights(e);assert.equal(h.common,false);assert.equal(h.rows.length,3);assert.equal(h.rows[0].slot,slots[0]);assert.equal(h.rows[1].slot,slots[1]);});
+test('新增時段不自動視為已回覆者可以',()=>{const e={slots,people:[person('主揪',yes),person('甲',{[slots[0]]:true})]};const r=rankSlots(e);assert.equal(r.find(x=>x.slot===slots[1]).common,false);assert.deepEqual(r.find(x=>x.slot===slots[1]).pending,['甲']);assert.equal(highlights(e).rows.length,1);});
+test('所有共同時段都保留，不限三個',()=>assert.equal(highlights({slots,people:[person('主揪',yes),person('甲',yes)]}).rows.length,4));
+test('日期採本地年月日，不受 UTC 換日影響',()=>assert.equal(dateKey(new Date(2026,11,1,0)), '2026-12-01'));
