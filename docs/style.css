@@ -842,3 +842,29 @@ header nav {
   line-height: 1.7;
   margin: 8px 0 14px;
 }
+
+/* Phone month view: let real date content set its height, without a reserved blank row. */
+@media (max-width: 600px) {
+  .calendar:not(.week) .day {
+    grid-template-rows: max-content minmax(34px, 1fr) minmax(34px, 1fr);
+    min-height: 0;
+    row-gap: 3px;
+  }
+  .calendar:not(.week) .date-head .date {
+    min-height: 20px;
+    padding: 0 2px;
+    line-height: 1.4;
+  }
+  .calendar:not(.week) .day-badge {
+    min-height: 12px;
+    padding: 0 2px;
+    line-height: 12px;
+  }
+  .calendar:not(.week) .day-term {
+    min-height: 0;
+    line-height: 12px;
+  }
+  .calendar:not(.week) .day-term:empty {
+    display: none;
+  }
+}
