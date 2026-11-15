@@ -66,3 +66,35 @@ export function highlights(event) {
     rows: common.length ? common : ranked.slice(0, 3),
   };
 }
+
+export function candidateScope(slots) {
+  const ordered = [...new Set(slots)].sort();
+  const dates = [...new Set(ordered.map((slot) => slot.split("_")[0]))];
+  const months = [...new Set(dates.map((date) => date.slice(0, 7)))].map(
+    (key) => {
+      const entries = ordered.filter((slot) => slot.startsWith(key + "-"));
+      return { key, count: entries.length, slots: entries };
+    },
+  );
+  return {
+    count: ordered.length,
+    days: dates.length,
+    first: dates[0],
+    last: dates.at(-1),
+    months,
+  };
+}
+export function visibleCandidates(slots, cursor, view) {
+  if (view === "month")
+    return slots.filter((slot) =>
+      slot.startsWith(dateKey(cursor).slice(0, 7) + "-"),
+    );
+  const start = new Date(cursor);
+  start.setDate(start.getDate() - start.getDay());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return slots.filter((slot) => {
+    const date = slot.split("_")[0];
+    return date >= dateKey(start) && date <= dateKey(end);
+  });
+}

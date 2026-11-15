@@ -6,7 +6,9 @@ import {
   slotLabel,
   rankSlots,
   highlights,
-} from "./domain.mjs?v=4";
+  candidateScope,
+  visibleCandidates,
+} from "./domain.mjs?v=5";
 import {
   dayInfo,
   calendarMetadata,
@@ -60,6 +62,7 @@ let newName = "",
   creation = null;
 let requestEpoch = 0,
   syncing = false;
+const openedSlots = new Set();
 const storage = {
   get(k) {
     try {
@@ -311,6 +314,19 @@ function results() {
     );
   return `<div class="card"><div class="step">大家的時間交集</div><h2>${h.common ? (event.status === "open" ? "目前已回覆者的共同時間" : "存檔時已回覆者的共同時間") : "最多人可以的前三個時段"}</h2><p class="muted">已回覆 ${done.length}／${event.people.length} 人${event.rosterKnown ? "" : "（未預設名單，總人數可能增加）"}</p>${pending.length ? `<p class="notice">${event.status === "open" ? "尚待回覆或補答" : "存檔時尚未回覆或補答"}：${esc(pending.map((p) => p.name).join("、"))}</p>` : '<p class="badge">目前名單已全部回覆</p>'}${resultRows(h.rows)}<details><summary>查看所有 ${event.slots.length} 個候選時段</summary>${resultRows(rankSlots(event))}</details></div>`;
 }
+function scopeDate(key) {
+  return key ? key.replaceAll("-", "/") : "";
+}
+function invitationScope() {
+  const scope = candidateScope(event.slots);
+  const filling = !admin && event.status === "open" && mode === "fill";
+  const shown = event.slots.filter((slot) => openedSlots.has(slot)).length;
+  return `<section class="invitation-scope" aria-label="本次統計範圍"><div class="scope-heading"><span>本次邀約統計</span><strong>共 ${scope.count} 個選項</strong><span>分布在 ${scope.days} 天${scope.months.length > 1 ? `、跨 ${scope.months.length} 個月份` : ""}</span></div><div class="scope-range"><time datetime="${scope.first}">${scopeDate(scope.first)}</time><span>至</span><time datetime="${scope.last}">${scopeDate(scope.last)}</time></div>${event.status === "open" ? `<p>${scope.months.length > 1 ? "<strong>不只目前這一頁。</strong> " : ""}請檢查全部 ${scope.count} 個候選時段；未標記「不行」的時段，送出後會視為可以參加。</p>` : "<p>以下為本次存檔的完整候選範圍。</p>"}<nav class="candidate-months" aria-label="候選月份快速查看">${scope.months.map((month) => `<button type="button" data-candidate-month="${month.key}" aria-pressed="${view === "month" && dateKey(cursor).startsWith(month.key)}"><strong>${month.key.replace("-", "/")}</strong><span>${month.count} 個選項${filling ? ` · ${month.slots.every((slot) => openedSlots.has(slot)) ? "已開啟" : "待查看"}` : ""}</span></button>`).join("")}</nav>${filling ? `<small class="scope-progress">本次已開啟 ${shown}／${scope.count} 個候選選項${shown < scope.count ? "，請切換月份檢查其他日期。" : "；請確認每個日期都已檢查，再送出。"}</small>` : ""}</section>`;
+}
+function submissionScope() {
+  const scope = candidateScope(event.slots);
+  return `<p class="submission-scope">本次送出涵蓋<strong>全部 ${scope.count} 個選項</strong>：${scopeDate(scope.first)} 至 ${scopeDate(scope.last)}${scope.months.length > 1 ? `（跨 ${scope.months.length} 個月份）` : ""}。</p>`;
+}
 function eventPage() {
   const own = event.people.find((p) => p.id === pid),
     locked = event.status !== "open";
@@ -320,6 +336,7 @@ function eventPage() {
       `一起${EVENT_TYPES[event.type].label} · 主揪 ${event.hostName}`,
       locked ? "已存檔 · 唯讀" : "邀約進行中",
     ) +
+    invitationScope() +
     `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}${event.type === "sport" ? " tee off" : ""}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout"><aside><div class="card"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2>${Object.entries(
       event.times,
     )
@@ -346,7 +363,7 @@ function eventPage() {
                   )}</select></label>${!selectedPid ? `<label>你的名字<input id="newname" maxlength="30" placeholder="請使用容易辨識的名字" value="${esc(newName)}"></label>` : ""}<small>已填寫的名字需使用原裝置或私人修改連結。</small>`
           }</div>`
         : ""
-    }</aside><section><div class="tabs">${!admin && !locked ? `<button data-mode="fill" class="${mode === "fill" ? "active" : ""}">填寫我的時間</button>` : ""}<button data-mode="results" class="${mode === "results" ? "active" : ""}">查看統計</button><button id="refresh">更新</button><small id="sync">每 20 秒同步</small></div>${addMode ? `<div class="card"><h2>追加你可以的日期</h2><p class="muted">既有回覆保留；新時段會請朋友補答。</p>${calendar()}<div class="calendar-foot"><span>新增 ${chosen.size} 個時段</span><button id="save-add" class="primary">儲存追加日期</button><button id="cancel-add">取消</button></div></div>` : `<div class="card"><div class="step">${mode === "fill" ? "02 / 排除不能參加的時間" : "月曆總覽"}</div><h2>${mode === "fill" ? "把不行的時間，輕輕劃掉。" : "每個時間，有誰能來？"}</h2>${mode === "fill" ? '<p class="muted">請標記不能參加的時間，其餘時段送出後視為可以。黃色 ? 代表新增待補答。</p><div class="actions"><button id="all-yes">全部都可以</button><button id="all-no">全部都不行</button></div><br>' : ""}${calendar()}${mode === "fill" ? `<div class="legend"><span><i class="dot"></i>可以</span><span><i class="dot red"></i>不行</span></div><div class="calendar-foot"><span>可以 ${event.slots.filter((s) => answers[s] === true).length} 個／不行 ${event.slots.filter((s) => answers[s] === false).length} 個${event.slots.some((s) => answers[s] === undefined) ? `／待補答 ${event.slots.filter((s) => answers[s] === undefined).length} 個` : ""}</span><button id="submit" class="primary" ${busy ? "disabled" : ""}>確認送出</button></div>` : ""}</div>${mode === "results" ? results() : ""}`}</section></div>`
+    }</aside><section><div class="tabs">${!admin && !locked ? `<button data-mode="fill" class="${mode === "fill" ? "active" : ""}">填寫我的時間</button>` : ""}<button data-mode="results" class="${mode === "results" ? "active" : ""}">查看統計</button><button id="refresh">更新</button><small id="sync">每 20 秒同步</small></div>${addMode ? `<div class="card"><h2>追加你可以的日期</h2><p class="muted">既有回覆保留；新時段會請朋友補答。</p>${calendar()}<div class="calendar-foot"><span>新增 ${chosen.size} 個時段</span><button id="save-add" class="primary">儲存追加日期</button><button id="cancel-add">取消</button></div></div>` : `<div class="card"><div class="step">${mode === "fill" ? "02 / 排除不能參加的時間" : "月曆總覽"}</div><h2>${mode === "fill" ? "把不行的時間，輕輕劃掉。" : "每個時間，有誰能來？"}</h2>${mode === "fill" ? '<p class="muted">請標記不能參加的時間，其餘時段送出後視為可以。黃色 ? 代表新增待補答。</p><div class="actions"><button id="all-yes">全部都可以</button><button id="all-no">全部都不行</button></div><br>' : ""}${calendar()}${mode === "fill" ? `<div class="legend"><span><i class="dot"></i>可以</span><span><i class="dot red"></i>不行</span></div>${submissionScope()}<div class="calendar-foot"><span>可以 ${event.slots.filter((s) => answers[s] === true).length} 個／不行 ${event.slots.filter((s) => answers[s] === false).length} 個${event.slots.some((s) => answers[s] === undefined) ? `／待補答 ${event.slots.filter((s) => answers[s] === undefined).length} 個` : ""}</span><button id="submit" class="primary" ${busy ? "disabled" : ""}>確認送出</button></div>` : ""}</div>${mode === "results" ? results() : ""}`}</section></div>`
   );
 }
 function trackEvent(doc) {
@@ -400,9 +417,17 @@ function render() {
         view: active.dataset.view,
         nav: active.dataset.nav,
         mode: active.dataset.mode,
+        candidateMonth: active.dataset.candidateMonth,
       }
     : null;
-  if (event) trackEvent(event);
+  if (event) {
+    trackEvent(event);
+    if (!admin && event.status === "open" && mode === "fill") {
+      visibleCandidates(event.slots, cursor, view).forEach((slot) =>
+        openedSlots.add(slot),
+      );
+    }
+  }
   $("#app").innerHTML = event
     ? event.deleted
       ? deletedPage()
@@ -422,7 +447,9 @@ function render() {
             ? $(`[data-nav="${focus.nav}"]`)
             : focus.mode
               ? $(`[data-mode="${focus.mode}"]`)
-              : null);
+              : focus.candidateMonth
+                ? $(`[data-candidate-month="${focus.candidateMonth}"]`)
+                : null);
   restored?.focus({ preventScroll: true });
 }
 function on(s, ev, fn) {
@@ -475,10 +502,18 @@ async function load() {
   if (admin || (edit && pid)) rememberIdentity();
   if (event.status !== "open") mode = "results";
   setPerson();
-  cursor = new Date(event.slots[0].split("_")[0] + "T12:00:00");
+  cursor = new Date(candidateScope(event.slots).first + "T12:00:00");
   render();
 }
 function bind() {
+  on("[data-candidate-month]", "click", (e) => {
+    cursor = new Date(e.currentTarget.dataset.candidateMonth + "-01T12:00:00");
+    view = "month";
+    render();
+    document
+      .querySelector(".calendar-head")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   on("[data-day]", "click", (e) => openAlmanac(e.currentTarget.dataset.day));
   on(
     "#retry-calendar",
@@ -605,18 +640,28 @@ function bind() {
         event.people.find((p) => p.id === (pid || selectedPid))?.name ||
         newName.trim();
       if (!name) throw Error("請先選擇或填寫你的名字。");
+      const unseen = event.slots.filter(
+        (slot) => !openedSlots.has(slot),
+      ).length;
+      const pending = event.slots.filter(
+        (slot) => answers[slot] === undefined,
+      ).length;
+      if (unseen || pending) {
+        const scope = candidateScope(event.slots);
+        const message =
+          `本次統計共 ${scope.count} 個選項，日期從 ${scopeDate(scope.first)} 至 ${scopeDate(scope.last)}。` +
+          (unseen
+            ? `本次還有 ${unseen} 個選項尚未開啟查看，請確認已檢查其他月份與日期。`
+            : "") +
+          (pending ? `另有 ${pending} 個新增待補答時段。` : "") +
+          "未標記「不行」的時段，送出後會視為可以參加。確定送出全部選項？";
+        if (!(await ask(message))) return;
+      }
       if (!edit) {
         edit = secret();
         pid = selectedPid || uid();
         storage.set("ft:" + eid, { pid, edit });
       }
-      if (
-        event.slots.some((s) => answers[s] === undefined) &&
-        !(await ask(
-          "新增的待補答時段，送出後會視為可以參加。請確認已檢查黃色時段。",
-        ))
-      )
-        return;
       const outgoing = Object.fromEntries(
         event.slots.map((s) => [s, answers[s] !== false]),
       );

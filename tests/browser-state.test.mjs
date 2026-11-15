@@ -415,3 +415,115 @@ test("調整打球預設不改動既有邀約的時間", async (t) => {
   assert.match(text, /13:00–16:00/);
   assert.equal(text.includes("06:00–09:00"), false);
 });
+function crossMonthFixture() {
+  const doc = fixture();
+  doc.title = "跨年聚餐";
+  doc.slots = [
+    "2027-01-05_dinner",
+    "2026-11-19_lunch",
+    "2026-12-03_dinner",
+    "2026-11-19_dinner",
+  ];
+  doc.people.forEach(
+    (p) => (p.answers = Object.fromEntries(doc.slots.map((s) => [s, true]))),
+  );
+  return doc;
+}
+test("邀約開頭清楚顯示全部選項、天數、跨月數與最早最晚日期", async (t) => {
+  const a = await setup(t, { doc: crossMonthFixture() });
+  const banner = a.w.document.querySelector(".invitation-scope");
+  assert.ok(banner);
+  assert.match(banner.textContent, /共 4 個選項/);
+  assert.match(banner.textContent, /分布在 3 天、跨 3 個月份/);
+  assert.match(banner.textContent, /2026\/11\/19/);
+  assert.match(banner.textContent, /2027\/01\/05/);
+  assert.match(banner.textContent, /不只目前這一頁/);
+  assert.equal(
+    banner.compareDocumentPosition(a.w.document.querySelector(".layout")) &
+      a.w.Node.DOCUMENT_POSITION_FOLLOWING,
+    a.w.Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  assert.match(banner.querySelector(".scope-progress").textContent, /2／4/);
+});
+test("月份捷徑切換到正確月曆，保留其他月份已排除的答案", async (t) => {
+  const a = await setup(t, { doc: crossMonthFixture() });
+  a.w.HTMLElement.prototype.scrollIntoView = function () {};
+  a.click('[data-candidate-month="2026-12"]');
+  assert.match(
+    a.w.document.querySelector(".calendar-head").textContent,
+    /2026 年 12 月/,
+  );
+  a.click('[data-slot="2026-12-03_dinner"]');
+  a.click('[data-candidate-month="2027-01"]');
+  assert.match(
+    a.w.document.querySelector(".scope-progress").textContent,
+    /4／4/,
+  );
+  a.click('[data-candidate-month="2026-12"]');
+  assert.match(
+    a.w.document.querySelector('[data-slot="2026-12-03_dinner"]').className,
+    /no/,
+  );
+});
+test("只看第一頁送出時提醒完整範圍與未開啟選項，取消不送出", async (t) => {
+  const a = await setup(t, { doc: crossMonthFixture() });
+  a.click("#submit");
+  await flush();
+  const modal = a.w.document.querySelector("dialog");
+  assert.ok(modal.open);
+  assert.match(modal.textContent, /共 4 個選項/);
+  assert.match(modal.textContent, /2027\/01\/05/);
+  assert.match(modal.textContent, /還有 2 個選項尚未開啟/);
+  modal.querySelector("button").click();
+  await flush();
+  assert.equal(
+    a.calls.some((c) => c.p_action === "respond"),
+    false,
+  );
+  assert.match(
+    a.w.document.querySelector(".submission-scope").textContent,
+    /全部 4 個選項/,
+  );
+});
+test("看完所有候選月份後可正常提交全部答案", async (t) => {
+  const a = await setup(t, { doc: crossMonthFixture() });
+  a.w.HTMLElement.prototype.scrollIntoView = function () {};
+  a.click('[data-candidate-month="2026-12"]');
+  a.click('[data-slot="2026-12-03_dinner"]');
+  a.click('[data-candidate-month="2027-01"]');
+  a.click("#submit");
+  await flush();
+  assert.equal(a.w.document.querySelector("dialog"), null);
+  const call = a.calls.find((c) => c.p_action === "respond");
+  assert.equal(Object.keys(call.p_data.answers).length, 4);
+  assert.equal(call.p_data.answers["2026-12-03_dinner"], false);
+});
+test("單日兩個用餐選項，清楚顯示為兩選項一天，不誤導跨月", async (t) => {
+  const doc = fixture();
+  doc.slots = [slot, added];
+  doc.people.forEach((p) => (p.answers = { [slot]: true, [added]: true }));
+  const a = await setup(t, { doc });
+  const banner = a.w.document.querySelector(".invitation-scope");
+  assert.match(banner.textContent, /共 2 個選項/);
+  assert.match(banner.textContent, /分布在 1 天/);
+  assert.equal(banner.textContent.includes("不只目前這一頁"), false);
+});
+test("首次填寫取消跨月提醒後，仍可選擇受邀者身分", async (t) => {
+  const doc = crossMonthFixture();
+  doc.people[1].submitted = false;
+  doc.people[1].answers = {};
+  const a = await setup(t, { doc, hash: `e=${id}` });
+  const select = a.w.document.querySelector("#person");
+  select.value = pid;
+  select.dispatchEvent(new a.w.Event("change", { bubbles: true }));
+  a.click("#submit");
+  await flush();
+  a.click("dialog button");
+  await flush();
+  assert.ok(a.w.document.querySelector("#person"));
+  assert.equal(a.w.localStorage.getItem("ft:" + id), null);
+  assert.equal(
+    a.calls.some((c) => c.p_action === "respond"),
+    false,
+  );
+});

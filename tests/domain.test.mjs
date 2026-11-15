@@ -61,3 +61,42 @@ test("打球同日同人數時，早球先於午球", () => {
   };
   assert.equal(highlights(e).rows[0].slot, "2026-12-01_morning");
 });
+test("候選範圍跨月跨年、排序和去重後正確區分選項與天數", async () => {
+  const { candidateScope } = await import("../docs/domain.mjs");
+  const s = candidateScope([
+    "2027-01-05_dinner",
+    "2026-11-19_lunch",
+    "2026-12-03_dinner",
+    "2026-11-19_dinner",
+    "2026-11-19_lunch",
+  ]);
+  assert.equal(s.count, 4);
+  assert.equal(s.days, 3);
+  assert.equal(s.first, "2026-11-19");
+  assert.equal(s.last, "2027-01-05");
+  assert.deepEqual(
+    s.months.map((m) => [m.key, m.count]),
+    [
+      ["2026-11", 2],
+      ["2026-12", 1],
+      ["2027-01", 1],
+    ],
+  );
+});
+test("週曆跨年只記錄當週實際顯示的候選，不把整個月當成已開啟", async () => {
+  const { visibleCandidates } = await import("../docs/domain.mjs");
+  const slots = [
+    "2026-12-27_lunch",
+    "2027-01-02_dinner",
+    "2027-01-03_lunch",
+    "2027-01-30_lunch",
+  ];
+  assert.deepEqual(
+    visibleCandidates(slots, new Date(2027, 0, 1, 12), "week"),
+    slots.slice(0, 2),
+  );
+  assert.deepEqual(
+    visibleCandidates(slots, new Date(2027, 0, 1, 12), "month"),
+    slots.slice(1),
+  );
+});

@@ -880,3 +880,100 @@ header nav {
   justify-content: center;
   padding: 4px 1px;
 }
+
+.invitation-scope {
+  margin: -8px 0 28px;
+  padding: 22px 24px;
+  background: #e5eee4;
+  border: 2px solid #416b50;
+  border-left: 8px solid #416b50;
+  border-radius: 16px;
+}
+.scope-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.scope-heading > strong {
+  font-size: 28px;
+  line-height: 1.4;
+  color: #234d42;
+}
+.scope-range {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 10px 0;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.scope-range > span {
+  font-size: 14px;
+  font-weight: 400;
+}
+.invitation-scope p {
+  font-size: 14px;
+  margin: 8px 0 14px;
+}
+.candidate-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.candidate-months button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.candidate-months button span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.candidate-months button[aria-pressed="true"] {
+  border: 2px solid var(--green);
+  background: #fff;
+}
+.scope-progress {
+  margin-top: 12px;
+  color: #355d42;
+  font-weight: 600;
+}
+.submission-scope {
+  padding: 12px 14px;
+  background: #edf3e9;
+  border-radius: 9px;
+  font-size: 13px;
+  margin: 14px 0 0;
+}
+.calendar-head {
+  scroll-margin-top: 20px;
+}
+@media (max-width: 480px) {
+  .invitation-scope {
+    padding: 16px 14px;
+    margin-bottom: 22px;
+    border-left-width: 5px;
+  }
+  .scope-heading {
+    gap: 4px 10px;
+  }
+  .scope-heading > strong {
+    font-size: 25px;
+  }
+  .scope-range {
+    font-size: 18px;
+    gap: 6px 9px;
+  }
+  .invitation-scope p {
+    font-size: 13px;
+  }
+  .candidate-months button {
+    padding: 7px 10px;
+  }
+}
