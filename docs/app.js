@@ -50,8 +50,8 @@ let draft = {
     lunch: ["12:00", "14:00"],
     dinner: ["18:00", "21:00"],
     day: ["09:00", "17:00"],
-    morning: ["07:00", "10:00"],
-    afternoon: ["13:00", "16:00"],
+    morning: ["06:00", "09:00"],
+    afternoon: ["10:00", "12:00"],
   },
 };
 let newName = "",
@@ -165,7 +165,7 @@ function timesInputs() {
   return EVENT_TYPES[draft.type].slots
     .map(
       (t) =>
-        `<label>${TYPES[t]}<div class="times"><input aria-label="${TYPES[t]}開始" type="time" data-time="${t}:0" value="${draft.times[t][0]}"><input aria-label="${TYPES[t]}結束" type="time" data-time="${t}:1" value="${draft.times[t][1]}"></div></label>`,
+        `<label>${TYPES[t]}${draft.type === "sport" ? "（tee off 開球時間）" : ""}<div class="times"><input aria-label="${TYPES[t]}開始" type="time" data-time="${t}:0" value="${draft.times[t][0]}"><input aria-label="${TYPES[t]}結束" type="time" data-time="${t}:1" value="${draft.times[t][1]}"></div></label>`,
     )
     .join("");
 }
@@ -290,7 +290,7 @@ async function openAlmanac(key) {
 function createPage() {
   return (
     top("好久不見，約個時間。", "圈出你有空的日子，剩下的，一起決定。") +
-    `<div class="layout"><aside><div class="card"><div class="step">01 / 這次想約什麼</div><h2>建立一個邀約</h2><label>邀約名稱<input id="title" maxlength="80" placeholder="例如：老朋友的週末聚餐" value="${esc(draft.title)}"></label><div class="segmented"><button data-type="meal" class="${draft.type === "meal" ? "active" : ""}">A · 吃飯</button><button data-type="class" class="${draft.type === "class" ? "active" : ""}">B · 上課</button><button data-type="sport" class="${draft.type === "sport" ? "active" : ""}">C · 打球</button></div>${timesInputs()}<label>你的名字（主揪）<input id="host" maxlength="30" placeholder="大家怎麼稱呼你？" value="${esc(draft.host)}"></label><label>受邀朋友 <span class="muted">選填</span><textarea id="names" placeholder="每行一位，或用逗號分隔">${esc(draft.names)}</textarea></label><small>先填名單，就能知道還在等誰。朋友也可以自行新增名字。</small></div></aside><section><div class="card"><div class="step">02 / 先圈選你可以的時間</div><h2>你的時間，是邀約的起點。</h2><p class="muted">可跨月份選擇；${draft.type === "class" ? "每個日期代表完整白天。" : EVENT_TYPES[draft.type].slots.map((t) => TYPES[t]).join("、") + "分開計算。"}</p><div id="cal">${calendar()}</div><div class="legend"><span><i class="dot"></i>已選可行時間</span><span><i class="dot gray"></i>點一下加入，再點取消</span></div><div class="calendar-foot"><div><span class="count">${chosen.size}</span> 個候選時段</div><button id="create" class="primary" ${busy ? "disabled" : ""}>建立邀約，取得連結 →</button></div></div><small>免登入 · 朋友各自填寫 · 自動找出共同時間</small></section></div>`
+    `<div class="layout"><aside><div class="card"><div class="step">01 / 這次想約什麼</div><h2>建立一個邀約</h2><label>邀約名稱<input id="title" maxlength="80" placeholder="例如：老朋友的週末聚餐" value="${esc(draft.title)}"></label><div class="segmented"><button data-type="meal" class="${draft.type === "meal" ? "active" : ""}">A · 吃飯</button><button data-type="class" class="${draft.type === "class" ? "active" : ""}">B · 上課</button><button data-type="sport" class="${draft.type === "sport" ? "active" : ""}">C · 打球</button></div>${timesInputs()}<label>你的名字（主揪）<input id="host" maxlength="30" placeholder="大家怎麼稱呼你？" value="${esc(draft.host)}"></label><label>受邀朋友 <span class="muted">選填</span><textarea id="names" placeholder="每行一位，或用逗號分隔">${esc(draft.names)}</textarea></label><small>先填名單，就能知道還在等誰。朋友也可以自行新增名字。</small></div></aside><section><div class="card"><div class="step">02 / 先圈選你可以的時間</div><h2>你的時間，是邀約的起點。</h2><p class="muted">可跨月份選擇；${draft.type === "sport" ? "早球、午球分開計算，時段代表 tee off 開球時間範圍。" : draft.type === "class" ? "每個日期代表完整白天。" : EVENT_TYPES[draft.type].slots.map((t) => TYPES[t]).join("、") + "分開計算。"}</p><div id="cal">${calendar()}</div><div class="legend"><span><i class="dot"></i>已選可行時間</span><span><i class="dot gray"></i>點一下加入，再點取消</span></div><div class="calendar-foot"><div><span class="count">${chosen.size}</span> 個候選時段</div><button id="create" class="primary" ${busy ? "disabled" : ""}>建立邀約，取得連結 →</button></div></div><small>免登入 · 朋友各自填寫 · 自動找出共同時間</small></section></div>`
   );
 }
 function resultRows(rows) {
@@ -320,11 +320,14 @@ function eventPage() {
       `一起${EVENT_TYPES[event.type].label} · 主揪 ${event.hostName}`,
       locked ? "已存檔 · 唯讀" : "邀約進行中",
     ) +
-    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout"><aside><div class="card"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2>${Object.entries(
+    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}${event.type === "sport" ? " tee off" : ""}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout"><aside><div class="card"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2>${Object.entries(
       event.times,
     )
       .filter(([t]) => EVENT_TYPES[event.type].slots.includes(t))
-      .map(([t, v]) => `<p class="people">${TYPES[t]} ${esc(v.join("–"))}</p>`)
+      .map(
+        ([t, v]) =>
+          `<p class="people">${TYPES[t]} ${esc(v.join("–"))}${event.type === "sport" ? " tee off" : ""}</p>`,
+      )
       .join(
         "",
       )}<label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="delete-event" class="danger">刪除此存檔</button>' : '<button id="add">追加日期</button><button id="close">完成統計並存檔</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${

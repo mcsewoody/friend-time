@@ -296,11 +296,23 @@ test("打球有獨立的早球午球預設時段及按鈕", async (t) => {
   a.click('[data-type="sport"]');
   assert.equal(
     a.w.document.querySelector('[aria-label="早球開始"]').value,
-    "07:00",
+    "06:00",
   );
   assert.equal(
     a.w.document.querySelector('[aria-label="午球開始"]').value,
-    "13:00",
+    "10:00",
+  );
+  assert.equal(
+    a.w.document.querySelector('[aria-label="早球結束"]').value,
+    "09:00",
+  );
+  assert.equal(
+    a.w.document.querySelector('[aria-label="午球結束"]').value,
+    "12:00",
+  );
+  assert.match(
+    a.w.document.querySelector("#app").textContent,
+    /tee off 開球時間範圍/,
   );
   assert.ok(a.w.document.querySelector(".slot-morning"));
   assert.ok(a.w.document.querySelector(".slot-afternoon"));
@@ -388,4 +400,18 @@ test("月曆與週曆都含農曆及官方上班日標示，且保留上下午�
         .textContent.includes("各校公告"),
     );
   }
+});
+
+test("調整打球預設不改動既有邀約的時間", async (t) => {
+  const doc = fixture();
+  doc.type = "sport";
+  doc.times = { morning: ["07:00", "10:00"], afternoon: ["13:00", "16:00"] };
+  const s = slot.split("_")[0] + "_morning";
+  doc.slots = [s];
+  doc.people.forEach((p) => (p.answers = { [s]: true }));
+  const a = await setup(t, { doc });
+  const text = a.w.document.querySelector("#app").textContent;
+  assert.match(text, /07:00–10:00/);
+  assert.match(text, /13:00–16:00/);
+  assert.equal(text.includes("06:00–09:00"), false);
 });
