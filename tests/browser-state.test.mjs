@@ -4,10 +4,28 @@ import fs from "node:fs/promises";
 import { JSDOM } from "jsdom";
 const source = (
   await fs.readFile(new URL("../docs/app.js", import.meta.url), "utf8")
-).replace(/^import[\s\S]*?;\s*/, "");
+).replace(/^import[\s\S]*?;\s*/gm, "");
 const domain = (
   await fs.readFile(new URL("../docs/domain.mjs", import.meta.url), "utf8")
 ).replaceAll("export ", "");
+const calendarModule = (
+  await fs.readFile(
+    new URL("../docs/calendar-info.mjs", import.meta.url),
+    "utf8",
+  )
+)
+  .replaceAll("export ", "")
+  .replaceAll("import.meta.url", '"https://example.com/calendar-info.mjs"');
+const calendarFixtures = await Promise.all(
+  [2023, 2024, 2025, 2026, 2027, 2028].map(async (y) =>
+    JSON.parse(
+      await fs.readFile(
+        new URL(`../docs/data/${y}.json`, import.meta.url),
+        "utf8",
+      ),
+    ),
+  ),
+);
 const shell = await fs.readFile(
   new URL("../docs/index.html", import.meta.url),
   "utf8",
@@ -82,7 +100,19 @@ async function setup(
         req.p_action === "verify" ? { ok: true } : structuredClone(doc),
     };
   };
-  w.eval('(function(){\"use strict\";\n' + domain + "\n" + source + "\n})();");
+  w.eval(
+    '(function(){\"use strict\";\n' +
+      domain +
+      "\n" +
+      calendarModule +
+      "\n" +
+      calendarFixtures
+        .map((d) => `registerCalendarYear(${JSON.stringify(d)});`)
+        .join("\n") +
+      "\n" +
+      source +
+      "\n})();",
+  );
   await flush();
   return {
     w,
@@ -319,4 +349,43 @@ test("存檔主揪可刪除和還原，但不可重新開放，並記錄存檔�
   assert.equal(a.calls.at(-1).p_action, "restore");
   assert.ok(a.w.document.querySelector("#delete-event"));
   assert.equal(a.w.document.querySelector("#submit"), null);
+});
+test("日期可展開完整農民曆，查看宜忌不會改動時間答案", async (t) => {
+  const a = await setup(t);
+  const date = slot.split("_")[0];
+  const before = a.w.document.querySelector(`[data-slot="${slot}"]`).className;
+  a.click(`[data-day="${date}"]`);
+  await flush();
+  const modal = a.w.document.querySelector(".almanac-dialog");
+  assert.ok(modal.open);
+  assert.match(modal.textContent, /宜/);
+  assert.match(modal.textContent, /忌/);
+  assert.match(modal.textContent, /民俗參考/);
+  assert.equal(
+    a.w.document.querySelector(`[data-slot="${slot}"]`).className,
+    before,
+  );
+  assert.equal(
+    a.calls.some((c) => c.p_action === "respond"),
+    false,
+  );
+  modal.querySelector("button").click();
+  assert.equal(a.w.document.querySelector(".almanac-dialog"), null);
+});
+test("月曆與週曆都含農曆及官方上班日標示，且保留上下午列", async (t) => {
+  const a = await setup(t);
+  for (const view of ["month", "week"]) {
+    a.click(`[data-view="${view}"]`);
+    const day = a.w.document.querySelector(
+      `[data-slot="${slot}"]`,
+    ).parentElement;
+    assert.ok(day.querySelector(".lunar-mini").textContent);
+    assert.ok(day.querySelector(".day-badge").textContent);
+    assert.ok(day.querySelector(".slot-dinner"));
+    assert.ok(
+      a.w.document
+        .querySelector(".calendar-sources")
+        .textContent.includes("各校公告"),
+    );
+  }
 });

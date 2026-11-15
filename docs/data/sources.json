@@ -1,0 +1,72 @@
+{
+  "checkedAt": "2026-11-15T17:11:26+08:00",
+  "officialYears": [
+    2023,
+    2024,
+    2025,
+    2026,
+    2027
+  ],
+  "years": [
+    {
+      "year": 2023,
+      "days": 365,
+      "officialLunarCount": 365,
+      "officialTermsCount": 0
+    },
+    {
+      "year": 2024,
+      "days": 366,
+      "officialLunarCount": 366,
+      "officialTermsCount": 0
+    },
+    {
+      "year": 2025,
+      "days": 365,
+      "officialLunarCount": 365,
+      "officialTermsCount": 0
+    },
+    {
+      "year": 2026,
+      "days": 365,
+      "officialLunarCount": 365,
+      "officialTermsCount": 365
+    },
+    {
+      "year": 2027,
+      "days": 365,
+      "officialLunarCount": 365,
+      "officialTermsCount": 365
+    },
+    {
+      "year": 2028,
+      "days": 366,
+      "officialLunarCount": 366,
+      "officialTermsCount": 366
+    },
+    {
+      "year": 2029,
+      "days": 365,
+      "officialLunarCount": 365,
+      "officialTermsCount": 0
+    },
+    {
+      "year": 2030,
+      "days": 365,
+      "officialLunarCount": 365,
+      "officialTermsCount": 0
+    }
+  ],
+  "dgpa": {
+    "2023": "https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202407/dd89fe8c-25f5-4035-a31e-7c14b44a74d7.csv&nfix=&name=112%e5%b9%b4%e4%b8%ad%e8%8f%af%e6%b0%91%e5%9c%8b%e6%94%bf%e5%ba%9c%e8%a1%8c%e6%94%bf%e6%a9%9f%e9%97%9c%e8%be%a6%e5%85%ac%e6%97%a5%e6%9b%86%e8%a1%a8.csv",
+    "2024": "https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202407/777152e9-fdd1-4a61-876c-2733e7692538.csv&nfix=&name=113年中華民國政府行政機關辦公日曆表.csv",
+    "2025": "https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202510/b84cb88a-803c-4621-a843-d637b2775615.csv&nfix=&name=114%e5%b9%b4%e4%b8%ad%e8%8f%af%e6%b0%91%e5%9c%8b%e6%94%bf%e5%ba%9c%e8%a1%8c%e6%94%bf%e6%a9%9f%e9%97%9c%e8%be%a6%e5%85%ac%e6%97%a5%e6%9b%86%e8%a1%a8(1141020%e6%9b%b4%e6%96%b0).csv",
+    "2026": "https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202506/a52331bd-a189-466b-b0f0-cae3062bbf74.csv&nfix=&name=115%e5%b9%b4%e4%b8%ad%e8%8f%af%e6%b0%91%e5%9c%8b%e6%94%bf%e5%ba%9c%e8%a1%8c%e6%94%bf%e6%a9%9f%e9%97%9c%e8%be%a6%e5%85%ac%e6%97%a5%e6%9b%86%e8%a1%a8.csv",
+    "2027": "https://www.dgpa.gov.tw/FileConversion?filename=dgpa/files/202607/f538b1ff-ba60-4c63-9477-10db8e6612d1.csv&nfix=&name=116%e5%b9%b4%e4%b8%ad%e8%8f%af%e6%b0%91%e5%9c%8b%e6%94%bf%e5%ba%9c%e8%a1%8c%e6%94%bf%e6%a9%9f%e9%97%9c%e8%be%a6%e5%85%ac%e6%97%a5%e6%9b%86%e8%a1%a8_utf8bom.csv"
+  },
+  "lunar": "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/A-A0087-001?Authorization=rdec-key-123-45678-011121314&format=CSV",
+  "terms": "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/A-A0087-003?Authorization=rdec-key-123-45678-011121314&format=CSV",
+  "folk": "https://github.com/6tail/lunar-javascript",
+  "folkVersion": "1.7.8",
+  "license": "MIT"
+}

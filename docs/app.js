@@ -6,7 +6,13 @@ import {
   slotLabel,
   rankSlots,
   highlights,
-} from "./domain.mjs?v=3";
+} from "./domain.mjs?v=4";
+import {
+  dayInfo,
+  calendarMetadata,
+  calendarYearState,
+  ensureCalendarYear,
+} from "./calendar-info.mjs?v=4";
 const $ = (s) => document.querySelector(s),
   esc = (s) =>
     String(s ?? "").replace(
@@ -194,8 +200,9 @@ function calendar() {
       cells += '<div class="day empty"></div>';
       continue;
     }
+    const info = dayInfo(key);
     cells +=
-      `<div class="day"><span class="date ${key === taipeiToday() ? "today" : ""}">${view === "week" ? `${d.getMonth() + 1}/` : ""}${d.getDate()}</span>` +
+      `<div class="day ${info.holiday === true ? "holiday-day" : ""} ${info.makeupWork ? "makeup-day" : ""}"><div class="date-head"><button class="date ${key === taipeiToday() ? "today" : ""}" data-day="${key}" aria-label="${key} ${esc(info.workLabel)} ${esc(info.lunar)} 查看農民曆"><strong>${view === "week" ? `${d.getMonth() + 1}/` : ""}${d.getDate()}</strong><span class="lunar-mini">${esc(info.lunarShort || "—")}</span></button><span class="day-badge ${info.holiday === true ? "rest-badge" : info.makeupWork ? "work-badge" : ""}" title="${esc(info.workLabel)}">${esc(info.workLabel)}</span><span class="day-term">${esc(info.term || info.festival || "")}</span></div>` +
       types
         .map((t) => {
           const s = key + "_" + t,
@@ -235,7 +242,50 @@ function calendar() {
         .join("") +
       "</div>";
   }
-  return `<div class="calendar-head"><h2>${cursor.getFullYear()} 年 ${cursor.getMonth() + 1} 月</h2><div class="nav"><button data-nav="-1" aria-label="上一${view === "month" ? "月" : "週"}">←</button><button data-nav="0">今天</button><button data-nav="1" aria-label="下一${view === "month" ? "月" : "週"}">→</button></div></div><div class="view-switch"><button data-view="month" class="${view === "month" ? "active" : ""}">月曆</button><button data-view="week" class="${view === "week" ? "active" : ""}">週曆</button></div><div class="weekdays">${["日", "一", "二", "三", "四", "五", "六"].map((x) => `<span>${x}</span>`).join("")}</div><div class="calendar ${view === "week" ? "week" : ""}">${cells}</div>`;
+  return `<div class="calendar-head"><h2>${cursor.getFullYear()} 年 ${cursor.getMonth() + 1} 月</h2><div class="nav"><button data-nav="-1" aria-label="上一${view === "month" ? "月" : "週"}">←</button><button data-nav="0">今天</button><button data-nav="1" aria-label="下一${view === "month" ? "月" : "週"}">→</button></div></div><div class="view-switch"><button data-view="month" class="${view === "month" ? "active" : ""}">月曆</button><button data-view="week" class="${view === "week" ? "active" : ""}">週曆</button></div><div class="weekdays">${["日", "一", "二", "三", "四", "五", "六"].map((x) => `<span>${x}</span>`).join("")}</div><div class="calendar ${view === "week" ? "week" : ""}">${cells}</div>${calendarSources()}`;
+}
+function calendarSources() {
+  const years = new Set([cursor.getFullYear()]);
+  if (view === "week") {
+    const start = new Date(cursor);
+    start.setDate(start.getDate() - start.getDay());
+    years.add(start.getFullYear());
+    start.setDate(start.getDate() + 6);
+    years.add(start.getFullYear());
+  }
+  const incomplete = [...years].some((y) => calendarYearState(y) !== "ready");
+  const metadata = calendarMetadata();
+  const coverage = metadata
+    ? `官方年度已收錄至 ${Math.max(...metadata.officialYears)} 年；資料查核 ${metadata.checkedAt.slice(0, 10)}。`
+    : "年度資料載入後顯示查核日期。";
+  return `<div class="calendar-legend"><span>紅：放假</span><span>綠：補行上班</span><span>點日期看農民曆</span></div><p class="calendar-scope">年度辦公日曆基準 · <a href="https://www.dgpa.gov.tw/typh/daily/nds.html" target="_blank" rel="noopener noreferrer">臨時停班停課官方公告 ↗</a><br>上課／補課依各校公告。</p>${incomplete ? '<p class="calendar-notice">日曆資料載入中或暫不可用（農民曆收錄範圍 2023–2030），不能以空白判斷是否上班。<button id="retry-calendar">重試</button></p>' : ""}<details class="calendar-sources"><summary>公告基準、資料來源與臨時停班停課</summary><p>年度放假／補班依<a href="https://data.gov.tw/dataset/14718" target="_blank" rel="noopener noreferrer">人事行政總處辦公日曆</a>。${esc(coverage)}尚未收錄的年度顯示「官方待公告」。</p><p>辦公日曆不等於每所學校的校曆。上課、補課依各校公告；天然災害停班停課請查<a href="https://www.dgpa.gov.tw/typh/daily/nds.html" target="_blank" rel="noopener noreferrer">人事行政總處即時公告</a>（各縣市／地區可能不同）。本頁的年度日曆不包含臨時停班停課。</p><p>農曆日期依<a href="https://data.gov.tw/dataset/157677" target="_blank" rel="noopener noreferrer">中央氣象署日曆資料</a>；2026–2028 節氣亦採氣象署資料，其餘節氣使用曆法換算。宜忌、干支與沖煞使用 <a href="https://github.com/6tail/lunar-javascript" target="_blank" rel="noopener noreferrer">lunar-javascript</a>，屬民俗參考，與政府上班上課公告無關。</p></details>`;
+}
+function scheduleCalendar() {
+  const years = new Set([cursor.getFullYear()]);
+  if (view === "week") {
+    const d = new Date(cursor);
+    d.setDate(d.getDate() - d.getDay());
+    years.add(d.getFullYear());
+    d.setDate(d.getDate() + 6);
+    years.add(d.getFullYear());
+  }
+  const needed = [...years].filter((y) => calendarYearState(y) === "idle");
+  if (needed.length)
+    Promise.all(needed.map(ensureCalendarYear)).then(() => {
+      if (!busy) render();
+    });
+}
+async function openAlmanac(key) {
+  await ensureCalendarYear(Number(key.slice(0, 4)));
+  const info = dayInfo(key);
+  const dialog = document.createElement("dialog");
+  dialog.className = "almanac-dialog";
+  dialog.setAttribute("aria-label", key + " 農民曆");
+  dialog.innerHTML = `<div class="almanac-title"><h2>${esc(key)} 農民曆</h2><button type="button" aria-label="關閉農民曆">✕</button></div>${info.state === "ready" ? `<p><strong>${esc(info.lunarYear)}年 ${esc(info.lunar)}</strong> · 生肖${esc(info.zodiac)}</p><p><span class="badge">${esc(info.workLabel)}</span> ${esc(info.term || info.festival || "")} ${esc(info.termTime || "")}${info.term && !info.termOfficial ? "（節氣推算）" : ""}</p><p>日干支：${esc(info.ganZhi)} · ${esc(info.chongSha)}</p><div class="almanac-yi"><strong>宜</strong><p>${esc(info.yi.join("、"))}</p></div><div class="almanac-ji"><strong>忌</strong><p>${esc(info.ji.join("、"))}</p></div><small>宜忌屬傳統民俗參考，非政府公告，也不影響你的時間選擇。</small>` : "<p>這個日期的農民曆資料暫不可用，請稍後重試。</p>"}<p class="almanac-links"><a href="https://www.dgpa.gov.tw/typh/daily/nds.html" target="_blank" rel="noopener noreferrer">官方臨時停班停課查詢 ↗</a></p>`;
+  dialog.querySelector("button").onclick = () => dialog.close();
+  dialog.addEventListener("close", () => dialog.remove(), { once: true });
+  document.body.append(dialog);
+  dialog.showModal();
 }
 function createPage() {
   return (
@@ -356,6 +406,7 @@ function render() {
       : eventPage()
     : createPage() + library();
   bind();
+  if (!event?.deleted) scheduleCalendar();
   const restored =
     focus &&
     (focus.id
@@ -425,6 +476,14 @@ async function load() {
   render();
 }
 function bind() {
+  on("[data-day]", "click", (e) => openAlmanac(e.currentTarget.dataset.day));
+  on(
+    "#retry-calendar",
+    "click",
+    act(async () => {
+      await ensureCalendarYear(cursor.getFullYear());
+    }),
+  );
   on("[data-copy]", "click", async (e) => {
     try {
       await navigator.clipboard.writeText(e.currentTarget.dataset.copy);
