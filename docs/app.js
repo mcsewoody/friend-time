@@ -8,6 +8,7 @@ let draft={title:'',host:'',names:'',type:'meal',times:{lunch:['12:00','14:00'],
 let newName='',selectedPid='',addMode=false,creation=null;
 const storage={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{toast('此瀏覽器無法記住身分，請保留私人連結。');}}};
 function toast(s){$('#toast').textContent=s;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),5000);}
+function ask(message){return new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='confirm-dialog';const text=document.createElement('p');text.textContent=message;const actions=document.createElement('div');actions.className='actions';for(const [label,value] of [['取消','cancel'],['確定','confirm']]){const button=document.createElement('button');button.textContent=label;button.className=value==='confirm'?'primary':'';button.onclick=()=>dialog.close(value);actions.append(button);}dialog.append(text,actions);dialog.addEventListener('close',()=>{const ok=dialog.returnValue==='confirm';dialog.remove();resolve(ok);},{once:true});document.body.append(dialog);dialog.showModal();});}
 const config=window.APP_CONFIG;
 async function rpc(action,data={},token=''){
  if(!config.supabaseUrl || !config.supabaseKey)throw Error('服務尚未設定完成，請稍後再試。');
@@ -71,11 +72,11 @@ function bind(){
  const outgoing=Object.fromEntries(event.slots.map(s=>[s,answers[s]!==false]));
  event=await rpc('respond',{pid,name,answers:outgoing},edit);storage.set('ft:'+eid,{pid,edit});history.replaceState(null,'',link({p:pid,edit}));dirty=false;mode='results';toast('已送出！你可以隨時回來修改。');
  }));
- on('#refresh','click',act(async()=>{if(dirty&&!confirm('重新載入會捨棄尚未送出的修改，確定更新？'))return;event=await rpc('get');setPerson();if(event.status!=='open')mode='results';toast('已更新最新回覆');}));
+ on('#refresh','click',act(async()=>{if(dirty&&!await ask('重新載入會捨棄尚未送出的修改，確定更新？'))return;event=await rpc('get');setPerson();if(event.status!=='open')mode='results';toast('已更新最新回覆');}));
  on('#add','click',()=>{addMode=true;chosen.clear();render();});on('#cancel-add','click',()=>{addMode=false;chosen.clear();render();});
  on('#save-add','click',act(async()=>{if(!chosen.size)throw Error('請選擇要追加的日期。');event=await rpc('append',{slots:[...chosen]},admin);chosen.clear();addMode=false;toast('日期已追加，請分享連結提醒朋友補答。');}));
- on('[data-final]','click',act(async(e)=>{const s=e.currentTarget.dataset.final;if(s&&confirm(`確定選擇 ${slotLabel(s)}，並關閉填寫？`)){event=await rpc('finalize',{slot:s},admin);toast('活動時間已確定');}}));
- on('#close','click',act(async()=>{if(confirm('結束這次邀約？之後仍可重新開放。'))event=await rpc('close',{},admin);}));on('#reopen','click',act(async()=>{event=await rpc('reopen',{},admin);}));
+ on('[data-final]','click',act(async(e)=>{const s=e.currentTarget.dataset.final;if(s&&await ask(`確定選擇 ${slotLabel(s)}，並關閉填寫？`)){event=await rpc('finalize',{slot:s},admin);toast('活動時間已確定');}}));
+ on('#close','click',act(async()=>{if(await ask('結束這次邀約？之後仍可重新開放。'))event=await rpc('close',{},admin);}));on('#reopen','click',act(async()=>{event=await rpc('reopen',{},admin);}));
 }
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 window.addEventListener('hashchange',()=>location.reload());
