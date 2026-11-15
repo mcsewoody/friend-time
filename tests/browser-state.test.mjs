@@ -8,6 +8,10 @@ const source = (
 const domain = (
   await fs.readFile(new URL("../docs/domain.mjs", import.meta.url), "utf8")
 ).replaceAll("export ", "");
+const shell = await fs.readFile(
+  new URL("../docs/index.html", import.meta.url),
+  "utf8",
+);
 const id = "12345678-1234-4234-8234-123456789012",
   pid = "12345678-1234-4234-8234-123456789013",
   key = "x".repeat(72);
@@ -39,7 +43,7 @@ async function setup(
   t,
   { doc = fixture(), hash = `e=${id}&p=${pid}&edit=${key}` } = {},
 ) {
-  const dom = new JSDOM('<main id="app"></main><div id="toast"></div>', {
+  const dom = new JSDOM(shell, {
     url: "https://example.com/#" + hash,
     runScripts: "outside-only",
     pretendToBeVisual: true,
@@ -231,7 +235,7 @@ test("邀約名稱及參與者文字不能插入 HTML", async (t) => {
   doc.people[1].name = "<script>alert(1)</script>";
   const a = await setup(t, { doc });
   assert.equal(a.w.document.querySelector("h1").textContent, doc.title);
-  assert.equal(a.w.document.querySelectorAll("img,script").length, 0);
+  assert.equal(a.w.document.querySelectorAll("#app img,#app script").length, 0);
 });
 test("只有參與者 ID 沒有修改憑證，不可顯示為本人", async (t) => {
   const a = await setup(t, { hash: `e=${id}&p=${pid}` });
@@ -243,4 +247,76 @@ test("只有參與者 ID 沒有修改憑證，不可顯示為本人", async (t) 
       .textContent.includes("你可以修改自己的回覆"),
     false,
   );
+});
+test("僅晚餐候選也保留午餐空位，月曆和週曆皆固定下排", async (t) => {
+  const doc = fixture();
+  doc.slots = [added];
+  doc.people.forEach((p) => (p.answers = { [added]: true }));
+  const a = await setup(t, { doc });
+  for (const view of ["month", "week"]) {
+    a.click(`[data-view="${view}"]`);
+    const dinner = a.w.document.querySelector(`[data-slot="${added}"]`);
+    assert.ok(dinner.classList.contains("slot-dinner"));
+    assert.ok(dinner.parentElement.querySelector(".slot-space.slot-lunch"));
+    assert.equal(dinner.parentElement.lastElementChild, dinner);
+  }
+});
+test("打球有獨立的早球午球預設時段及按鈕", async (t) => {
+  const a = await setup(t, { hash: "" });
+  a.click('[data-type="sport"]');
+  assert.equal(
+    a.w.document.querySelector('[aria-label="早球開始"]').value,
+    "07:00",
+  );
+  assert.equal(
+    a.w.document.querySelector('[aria-label="午球開始"]').value,
+    "13:00",
+  );
+  assert.ok(a.w.document.querySelector(".slot-morning"));
+  assert.ok(a.w.document.querySelector(".slot-afternoon"));
+  assert.equal(a.w.document.querySelector(".slot-lunch"), null);
+});
+test("任何參與者或存檔訪客都能從頁首發起新邀約", async (t) => {
+  const doc = fixture();
+  doc.status = "final";
+  doc.archived = true;
+  const a = await setup(t, { doc });
+  assert.ok(
+    [...a.w.document.querySelectorAll("header a")].some(
+      (a) =>
+        a.textContent.includes("發起新邀約") && a.getAttribute("href") === "./",
+    ),
+  );
+  assert.equal(a.w.document.querySelector("#submit"), null);
+  assert.equal(a.w.document.querySelector("#delete-event"), null);
+});
+test("存檔主揪可刪除和還原，但不可重新開放，並記錄存檔索引", async (t) => {
+  const doc = fixture();
+  doc.status = "final";
+  doc.archived = true;
+  doc.archivedAt = "2026-11-15T08:00:00Z";
+  const a = await setup(t, { doc, hash: `e=${id}&admin=${key}` });
+  assert.equal(a.w.document.querySelector("#reopen"), null);
+  assert.ok(a.w.document.querySelector("#delete-event"));
+  assert.equal(
+    JSON.parse(a.w.localStorage.getItem("ft:library"))[0].status,
+    "final",
+  );
+  a.setDoc({ ...doc, deleted: true });
+  a.click("#delete-event");
+  await flush();
+  a.click("dialog .primary");
+  await flush();
+  assert.equal(a.calls.at(-1).p_action, "delete");
+  assert.ok(a.w.document.querySelector("#restore-event"));
+  assert.equal(
+    JSON.parse(a.w.localStorage.getItem("ft:library"))[0].deleted,
+    true,
+  );
+  a.setDoc(doc);
+  a.click("#restore-event");
+  await flush();
+  assert.equal(a.calls.at(-1).p_action, "restore");
+  assert.ok(a.w.document.querySelector("#delete-event"));
+  assert.equal(a.w.document.querySelector("#submit"), null);
 });

@@ -11,6 +11,12 @@ await db.exec(
     "utf8",
   ),
 );
+await db.exec(
+  await fs.readFile(
+    new URL("../database/002_sport_archives.sql", import.meta.url),
+    "utf8",
+  ),
+);
 const token = () => randomUUID() + randomUUID(),
   admin = token(),
   member = token(),
@@ -115,7 +121,7 @@ test("修改連結可補答；答案不包含憑證或雜湊", async () => {
   assert.equal(JSON.stringify(doc).includes(member), false);
   assert.equal("member_keys" in doc, false);
 });
-test("確定日期後禁止填寫，主揪可重新開放", async () => {
+test("確定日期後固定存檔，禁止填寫與重新開放", async () => {
   doc = await api("finalize", { slot: lunch }, admin);
   assert.equal(doc.status, "final");
   await assert.rejects(
@@ -126,7 +132,9 @@ test("確定日期後禁止填寫，主揪可重新開放", async () => {
     ),
     /已關閉/,
   );
-  assert.equal((await api("reopen", {}, admin)).status, "open");
+  await assert.rejects(api("reopen", {}, admin), /固定存檔/);
+  assert.equal(doc.archived, true);
+  assert.ok(doc.archivedAt);
 });
 test("上課僅接受整天；SQL 特殊字元與 HTML 只當文字", async () => {
   await assert.rejects(
@@ -161,3 +169,73 @@ test("上課僅接受整天；SQL 特殊字元與 HTML 只當文字", async () =
   assert.equal(d.type, "class");
 });
 test.after(() => db.close());
+test("打球接受早球午球，拒絕用餐時段", async () => {
+  const data = {
+    title: "打球",
+    host: "主揪",
+    type: "sport",
+    times: { morning: ["07:00", "10:00"], afternoon: ["13:00", "16:00"] },
+    names: [],
+    slots: [date + "_morning", date + "_afternoon"],
+  };
+  const d = await api("create", data, token(), randomUUID());
+  assert.equal(d.type, "sport");
+  await assert.rejects(
+    api("create", { ...data, slots: [lunch] }, token(), randomUUID()),
+    /類型/,
+  );
+});
+test("只有主揪能刪除存檔，刪除後邀請連結無法讀取", async () => {
+  await assert.rejects(api("delete", {}, member), /管理連結/);
+  const before = await api("get");
+  const deleted = await api("delete", {}, admin);
+  assert.equal(deleted.deleted, true);
+  await assert.rejects(api("get"), /已由主揪刪除/);
+  const owner = await api("get", {}, admin);
+  assert.equal(owner.deleted, true);
+  assert.deepEqual(owner.people, before.people);
+  await assert.rejects(
+    api(
+      "respond",
+      { pid, name: "朋友", answers: { [lunch]: true, [dinner]: true } },
+      member,
+    ),
+    /已由主揪刪除/,
+  );
+});
+test("還原不改動存檔內容或時間，而且保持唯讀", async () => {
+  await assert.rejects(api("restore", {}, member), /管理連結/);
+  const before = await api("get", {}, admin),
+    restored = await api("restore", {}, admin);
+  assert.equal(restored.archivedAt, before.archivedAt);
+  assert.deepEqual(restored.people, before.people);
+  assert.equal(restored.status, "final");
+  assert.equal((await api("get")).deleted, undefined);
+  await assert.rejects(
+    api("append", { slots: [date + "_lunch"] }, admin),
+    /無法修改/,
+  );
+});
+test("進行中邀約不能直接刪除，完成統計後才能刪除", async () => {
+  const eid = randomUUID(),
+    key = token();
+  await api(
+    "create",
+    {
+      title: "測試",
+      host: "主揪",
+      type: "class",
+      times: { day: ["09:00", "17:00"] },
+      names: [],
+      slots: [date + "_day"],
+    },
+    key,
+    eid,
+  );
+  await assert.rejects(api("delete", {}, key, eid), /先完成統計/);
+  const archived = await api("close", {}, key, eid);
+  assert.equal(archived.archived, true);
+  assert.ok(archived.archivedAt);
+  await assert.rejects(api("close", {}, key, eid), /無法修改/);
+  assert.equal((await api("delete", {}, key, eid)).deleted, true);
+});

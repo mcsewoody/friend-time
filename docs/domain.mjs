@@ -1,4 +1,15 @@
-export const TYPES = { lunch: "午餐", dinner: "晚餐", day: "整天" };
+export const TYPES = {
+  lunch: "午餐",
+  dinner: "晚餐",
+  day: "整天",
+  morning: "早球",
+  afternoon: "午球",
+};
+export const EVENT_TYPES = {
+  meal: { label: "吃飯", slots: ["lunch", "dinner"] },
+  class: { label: "上課", slots: ["day"] },
+  sport: { label: "打球", slots: ["morning", "afternoon"] },
+};
 export function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -39,8 +50,12 @@ export function rankSlots(event) {
       (a, b) =>
         b.yes.length - a.yes.length ||
         a.slot.split("_")[0].localeCompare(b.slot.split("_")[0]) ||
-        ["lunch", "dinner", "day"].indexOf(a.slot.split("_")[1]) -
-          ["lunch", "dinner", "day"].indexOf(b.slot.split("_")[1]),
+        ["lunch", "dinner", "morning", "afternoon", "day"].indexOf(
+          a.slot.split("_")[1],
+        ) -
+          ["lunch", "dinner", "morning", "afternoon", "day"].indexOf(
+            b.slot.split("_")[1],
+          ),
     );
 }
 export function highlights(event) {

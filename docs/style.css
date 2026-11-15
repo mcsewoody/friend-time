@@ -593,3 +593,85 @@ a {
     min-height: 44px;
   }
 }
+
+/* Stable time rows: absent lunch/morning still reserves the upper row. */
+.day {
+  display: grid;
+  grid-template-rows: 22px minmax(34px, 1fr) minmax(34px, 1fr);
+  gap: 4px;
+  align-content: stretch;
+}
+.date {
+  grid-row: 1;
+  margin-bottom: 0;
+}
+.slot-lunch,
+.slot-morning {
+  grid-row: 2;
+}
+.slot-dinner,
+.slot-afternoon {
+  grid-row: 3;
+}
+.slot-day {
+  grid-row: 2 / 4;
+}
+.slot-space {
+  display: block;
+  min-height: 34px;
+}
+.day .slot {
+  margin: 0;
+  min-width: 0;
+}
+header nav {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.button-link {
+  display: inline-block;
+  text-decoration: none;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 13px;
+}
+.danger {
+  color: var(--red);
+  border-color: #d4aaa5;
+}
+.library {
+  margin-top: 28px;
+}
+.library > button {
+  margin: 14px 0;
+}
+.archive-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding: 17px 0;
+  text-decoration: none;
+}
+@media (max-width: 600px) {
+  header .timezone {
+    display: none;
+  }
+  .segmented button {
+    padding: 10px 6px;
+  }
+  .tabs {
+    flex-wrap: wrap;
+  }
+}
+@media (pointer: coarse) {
+  .day {
+    grid-template-rows: 22px minmax(44px, 1fr) minmax(44px, 1fr);
+  }
+  .slot-space {
+    min-height: 44px;
+  }
+}

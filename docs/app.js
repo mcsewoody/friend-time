@@ -1,11 +1,12 @@
 import {
   TYPES,
+  EVENT_TYPES,
   dateKey,
   taipeiToday,
   slotLabel,
   rankSlots,
   highlights,
-} from "./domain.mjs";
+} from "./domain.mjs?v=3";
 const $ = (s) => document.querySelector(s),
   esc = (s) =>
     String(s ?? "").replace(
@@ -43,6 +44,8 @@ let draft = {
     lunch: ["12:00", "14:00"],
     dinner: ["18:00", "21:00"],
     day: ["09:00", "17:00"],
+    morning: ["07:00", "10:00"],
+    afternoon: ["13:00", "16:00"],
   },
 };
 let newName = "",
@@ -110,7 +113,7 @@ const config = window.APP_CONFIG;
 function rememberIdentity() {
   storage.set("ft:" + eid, admin ? { admin } : { pid, edit });
 }
-async function rpc(action, data = {}, token = "") {
+async function rpc(action, data = {}, token = "", eventId = eid) {
   if (!config.supabaseUrl || !config.supabaseKey)
     throw Error("服務尚未設定完成，請稍後再試。");
   const r = await fetch(config.supabaseUrl + "/rest/v1/rpc/friend_time_api", {
@@ -118,7 +121,7 @@ async function rpc(action, data = {}, token = "") {
     headers: { "Content-Type": "application/json", apikey: config.supabaseKey },
     body: JSON.stringify({
       p_action: action,
-      p_id: eid,
+      p_id: eventId,
       p_token: token,
       p_data: data,
     }),
@@ -153,7 +156,7 @@ function top(title, sub, tag = "一起找到，剛剛好的時間") {
   return `<div class="hero"><div><div class="eyebrow">MAKE TIME FOR EACH OTHER</div><h1>${esc(title)}</h1><p class="lede">${esc(sub)}</p></div><span class="hero-tag">${tag}</span></div>`;
 }
 function timesInputs() {
-  return (draft.type === "meal" ? ["lunch", "dinner"] : ["day"])
+  return EVENT_TYPES[draft.type].slots
     .map(
       (t) =>
         `<label>${TYPES[t]}<div class="times"><input aria-label="${TYPES[t]}開始" type="time" data-time="${t}:0" value="${draft.times[t][0]}"><input aria-label="${TYPES[t]}結束" type="time" data-time="${t}:1" value="${draft.times[t][1]}"></div></label>`,
@@ -167,7 +170,7 @@ function latestDate() {
 }
 function calendar() {
   const type = event?.type || draft.type,
-    types = type === "meal" ? ["lunch", "dinner"] : ["day"];
+    types = EVENT_TYPES[type].slots;
   let start = new Date(cursor),
     days = 7;
   if (view === "month") {
@@ -198,7 +201,8 @@ function calendar() {
           const s = key + "_" + t,
             exists = event?.slots.includes(s),
             selecting = !event || addMode;
-          if (!selecting && !exists) return "";
+          if (!selecting && !exists)
+            return `<span class="slot-space slot-${t}" aria-hidden="true"></span>`;
           const r = ranked.find((x) => x.slot === s);
           let cls = "",
             txt = TYPES[t],
@@ -226,7 +230,7 @@ function calendar() {
           const disabled = selecting
             ? key < taipeiToday() || key > latestDate() || exists
             : mode === "results" || event.status !== "open";
-          return `<button class="slot ${cls}" data-slot="${s}" aria-label="${slotLabel(s)}${!selecting && mode === "fill" ? (answers[s] === false ? " 不行" : answers[s] === undefined ? " 待補答" : " 可以") : ""}" aria-pressed="${selecting ? chosen.has(s) || !!exists : answers[s] === false}" ${disabled ? "disabled" : ""}>${txt}${sub ? `<small>${sub}</small>` : ""}</button>`;
+          return `<button class="slot slot-${t} ${cls}" data-slot="${s}" aria-label="${slotLabel(s)}${!selecting && mode === "fill" ? (answers[s] === false ? " 不行" : answers[s] === undefined ? " 待補答" : " 可以") : ""}" aria-pressed="${selecting ? chosen.has(s) || !!exists : answers[s] === false}" ${disabled ? "disabled" : ""}>${txt}${sub ? `<small>${sub}</small>` : ""}</button>`;
         })
         .join("") +
       "</div>";
@@ -236,7 +240,7 @@ function calendar() {
 function createPage() {
   return (
     top("好久不見，約個時間。", "圈出你有空的日子，剩下的，一起決定。") +
-    `<div class="layout"><aside><div class="card"><div class="step">01 / 這次想約什麼</div><h2>建立一個邀約</h2><label>邀約名稱<input id="title" maxlength="80" placeholder="例如：老朋友的週末聚餐" value="${esc(draft.title)}"></label><div class="segmented"><button data-type="meal" class="${draft.type === "meal" ? "active" : ""}">A · 吃飯</button><button data-type="class" class="${draft.type === "class" ? "active" : ""}">B · 上課</button></div>${timesInputs()}<label>你的名字（主揪）<input id="host" maxlength="30" placeholder="大家怎麼稱呼你？" value="${esc(draft.host)}"></label><label>受邀朋友 <span class="muted">選填</span><textarea id="names" placeholder="每行一位，或用逗號分隔">${esc(draft.names)}</textarea></label><small>先填名單，就能知道還在等誰。朋友也可以自行新增名字。</small></div></aside><section><div class="card"><div class="step">02 / 先圈選你可以的時間</div><h2>你的時間，是邀約的起點。</h2><p class="muted">可跨月份選擇；${draft.type === "meal" ? "午餐、晚餐分開計算。" : "每個日期代表完整白天。"}</p><div id="cal">${calendar()}</div><div class="legend"><span><i class="dot"></i>已選可行時間</span><span><i class="dot gray"></i>點一下加入，再點取消</span></div><div class="calendar-foot"><div><span class="count">${chosen.size}</span> 個候選時段</div><button id="create" class="primary" ${busy ? "disabled" : ""}>建立邀約，取得連結 →</button></div></div><small>免登入 · 朋友各自填寫 · 自動找出共同時間</small></section></div>`
+    `<div class="layout"><aside><div class="card"><div class="step">01 / 這次想約什麼</div><h2>建立一個邀約</h2><label>邀約名稱<input id="title" maxlength="80" placeholder="例如：老朋友的週末聚餐" value="${esc(draft.title)}"></label><div class="segmented"><button data-type="meal" class="${draft.type === "meal" ? "active" : ""}">A · 吃飯</button><button data-type="class" class="${draft.type === "class" ? "active" : ""}">B · 上課</button><button data-type="sport" class="${draft.type === "sport" ? "active" : ""}">C · 打球</button></div>${timesInputs()}<label>你的名字（主揪）<input id="host" maxlength="30" placeholder="大家怎麼稱呼你？" value="${esc(draft.host)}"></label><label>受邀朋友 <span class="muted">選填</span><textarea id="names" placeholder="每行一位，或用逗號分隔">${esc(draft.names)}</textarea></label><small>先填名單，就能知道還在等誰。朋友也可以自行新增名字。</small></div></aside><section><div class="card"><div class="step">02 / 先圈選你可以的時間</div><h2>你的時間，是邀約的起點。</h2><p class="muted">可跨月份選擇；${draft.type === "class" ? "每個日期代表完整白天。" : EVENT_TYPES[draft.type].slots.map((t) => TYPES[t]).join("、") + "分開計算。"}</p><div id="cal">${calendar()}</div><div class="legend"><span><i class="dot"></i>已選可行時間</span><span><i class="dot gray"></i>點一下加入，再點取消</span></div><div class="calendar-foot"><div><span class="count">${chosen.size}</span> 個候選時段</div><button id="create" class="primary" ${busy ? "disabled" : ""}>建立邀約，取得連結 →</button></div></div><small>免登入 · 朋友各自填寫 · 自動找出共同時間</small></section></div>`
   );
 }
 function resultRows(rows) {
@@ -255,7 +259,7 @@ function results() {
         !p.submitted ||
         event.slots.some((s) => typeof p.answers[s] !== "boolean"),
     );
-  return `<div class="card"><div class="step">大家的時間交集</div><h2>${h.common ? "目前已回覆者的共同時間" : "最多人可以的前三個時段"}</h2><p class="muted">已回覆 ${done.length}／${event.people.length} 人${event.rosterKnown ? "" : "（未預設名單，總人數可能增加）"}</p>${pending.length ? `<p class="notice">尚待回覆或補答：${esc(pending.map((p) => p.name).join("、"))}</p>` : '<p class="badge">目前名單已全部回覆</p>'}${resultRows(h.rows)}<details><summary>查看所有 ${event.slots.length} 個候選時段</summary>${resultRows(rankSlots(event))}</details></div>`;
+  return `<div class="card"><div class="step">大家的時間交集</div><h2>${h.common ? (event.status === "open" ? "目前已回覆者的共同時間" : "存檔時已回覆者的共同時間") : "最多人可以的前三個時段"}</h2><p class="muted">已回覆 ${done.length}／${event.people.length} 人${event.rosterKnown ? "" : "（未預設名單，總人數可能增加）"}</p>${pending.length ? `<p class="notice">${event.status === "open" ? "尚待回覆或補答" : "存檔時尚未回覆或補答"}：${esc(pending.map((p) => p.name).join("、"))}</p>` : '<p class="badge">目前名單已全部回覆</p>'}${resultRows(h.rows)}<details><summary>查看所有 ${event.slots.length} 個候選時段</summary>${resultRows(rankSlots(event))}</details></div>`;
 }
 function eventPage() {
   const own = event.people.find((p) => p.id === pid),
@@ -263,17 +267,17 @@ function eventPage() {
   return (
     top(
       event.title,
-      `${event.type === "meal" ? "一起吃飯" : "一起上課"} · 主揪 ${event.hostName}`,
-      locked ? "邀約已關閉" : "邀約進行中",
+      `一起${EVENT_TYPES[event.type].label} · 主揪 ${event.hostName}`,
+      locked ? "已存檔 · 唯讀" : "邀約進行中",
     ) +
-    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已結束"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}` : ""}</div>` : ""}<div class="layout"><aside><div class="card"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2>${Object.entries(
+    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout"><aside><div class="card"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2>${Object.entries(
       event.times,
     )
-      .filter(([t]) => (event.type === "meal" ? t !== "day" : t === "day"))
+      .filter(([t]) => EVENT_TYPES[event.type].slots.includes(t))
       .map(([t, v]) => `<p class="people">${TYPES[t]} ${esc(v.join("–"))}</p>`)
       .join(
         "",
-      )}<label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="reopen">重新開放填寫</button>' : '<button id="add">追加日期</button><button id="close">結束邀約</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${
+      )}<label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="delete-event" class="danger">刪除此存檔</button>' : '<button id="add">追加日期</button><button id="close">完成統計並存檔</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${
       !admin && !locked
         ? `<div class="card"><div class="step">01 / 你是哪一位</div>${
             own
@@ -292,6 +296,48 @@ function eventPage() {
     }</aside><section><div class="tabs">${!admin && !locked ? `<button data-mode="fill" class="${mode === "fill" ? "active" : ""}">填寫我的時間</button>` : ""}<button data-mode="results" class="${mode === "results" ? "active" : ""}">查看統計</button><button id="refresh">更新</button><small id="sync">每 20 秒同步</small></div>${addMode ? `<div class="card"><h2>追加你可以的日期</h2><p class="muted">既有回覆保留；新時段會請朋友補答。</p>${calendar()}<div class="calendar-foot"><span>新增 ${chosen.size} 個時段</span><button id="save-add" class="primary">儲存追加日期</button><button id="cancel-add">取消</button></div></div>` : `<div class="card"><div class="step">${mode === "fill" ? "02 / 排除不能參加的時間" : "月曆總覽"}</div><h2>${mode === "fill" ? "把不行的時間，輕輕劃掉。" : "每個時間，有誰能來？"}</h2>${mode === "fill" ? '<p class="muted">請標記不能參加的時間，其餘時段送出後視為可以。黃色 ? 代表新增待補答。</p><div class="actions"><button id="all-yes">全部都可以</button><button id="all-no">全部都不行</button></div><br>' : ""}${calendar()}${mode === "fill" ? `<div class="legend"><span><i class="dot"></i>可以</span><span><i class="dot red"></i>不行</span></div><div class="calendar-foot"><span>可以 ${event.slots.filter((s) => answers[s] === true).length} 個／不行 ${event.slots.filter((s) => answers[s] === false).length} 個${event.slots.some((s) => answers[s] === undefined) ? `／待補答 ${event.slots.filter((s) => answers[s] === undefined).length} 個` : ""}</span><button id="submit" class="primary" ${busy ? "disabled" : ""}>確認送出</button></div>` : ""}</div>${mode === "results" ? results() : ""}`}</section></div>`
   );
 }
+function trackEvent(doc) {
+  const entries = (storage.get("ft:library") || []).filter(
+    (e) => e.id !== doc.id,
+  );
+  entries.unshift({
+    id: doc.id,
+    title: doc.title,
+    type: doc.type,
+    status: doc.status,
+    deleted: !!doc.deleted,
+  });
+  storage.set("ft:library", entries);
+}
+function knownEntries() {
+  const entries = storage.get("ft:library") || [];
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (
+        /^ft:[a-f0-9-]{36}$/.test(key) &&
+        storage.get(key) &&
+        !entries.some((e) => e.id === key.slice(3))
+      )
+        entries.push({
+          id: key.slice(3),
+          title: "先前的邀約（點開查看）",
+          status: "unknown",
+        });
+    }
+  } catch {}
+  return entries;
+}
+function library() {
+  // The cloud keeps the archive; this browser keeps only its link index.
+  const entries = knownEntries();
+  return `<div class="card library"><div class="step">這台裝置的邀約紀錄</div><h2>進行中與已存檔</h2><small>僅列出你在這個瀏覽器開啟過的邀約。換裝置請使用原邀請／管理連結；完成的結果保存在雲端。</small><button id="refresh-library">更新紀錄</button>${entries.length ? entries.map((e) => `<a class="archive-row" href="#${new URLSearchParams({ e: e.id })}"><strong>${esc(e.title)}</strong><span class="badge">${e.deleted ? "已刪除 · 主揪可還原" : e.status === "unknown" ? "待更新" : e.status === "open" ? "進行中" : "已存檔 · 唯讀"}</span></a>`).join("") : '<p class="muted">建立或開啟邀約後，紀錄會出現在這裡。</p>'}</div>`;
+}
+function deletedPage() {
+  return (
+    top("邀約存檔已刪除", event.title) +
+    `<div class="card"><p>一般邀請連結已無法查看這份存檔。還原後會保留原本的日期與統計，並維持唯讀。</p>${admin ? '<button id="restore-event" class="primary">還原此存檔</button>' : ""} <a class="button-link" href="./">發起新邀約／查看紀錄</a></div>`
+  );
+}
 function render() {
   const active = document.activeElement;
   const focus = active?.closest("#app")
@@ -303,7 +349,12 @@ function render() {
         mode: active.dataset.mode,
       }
     : null;
-  $("#app").innerHTML = event ? eventPage() : createPage();
+  if (event) trackEvent(event);
+  $("#app").innerHTML = event
+    ? event.deleted
+      ? deletedPage()
+      : eventPage()
+    : createPage() + library();
   bind();
   const restored =
     focus &&
@@ -353,7 +404,7 @@ function setPerson() {
 }
 async function load() {
   if (!edit) pid = null;
-  event = await rpc("get");
+  event = await rpc("get", {}, admin || "");
   if (admin) {
     await rpc("verify", {}, admin);
     mode = "results";
@@ -426,7 +477,7 @@ function bind() {
       if (!draft.title.trim() || !draft.host.trim())
         throw Error("請填寫邀約名稱和你的名字。");
       if (!chosen.size) throw Error("請至少圈選一個可行時段。");
-      for (const t of draft.type === "meal" ? ["lunch", "dinner"] : ["day"])
+      for (const t of EVENT_TYPES[draft.type].slots)
         if (!draft.times[t][0] || draft.times[t][0] >= draft.times[t][1])
           throw Error("結束時間必須晚於開始時間。");
       creation ??= { id: uid(), token: secret() };
@@ -521,7 +572,7 @@ function bind() {
     act(async () => {
       const previous = { ...answers },
         wasDirty = dirty;
-      event = await rpc("get");
+      event = await rpc("get", {}, admin || "");
       setPerson();
       if (wasDirty) {
         answers = Object.fromEntries(event.slots.map((s) => [s, previous[s]]));
@@ -561,9 +612,12 @@ function bind() {
     "click",
     act(async (e) => {
       const s = e.currentTarget.dataset.final;
-      if (s && (await ask(`確定選擇 ${slotLabel(s)}，並關閉填寫？`))) {
+      if (
+        s &&
+        (await ask(`確定選擇 ${slotLabel(s)}，並固定存檔？存檔後無法再修改。`))
+      ) {
         event = await rpc("finalize", { slot: s }, admin);
-        toast("活動時間已確定");
+        toast("活動時間已確定，統計已存檔");
       }
     }),
   );
@@ -571,15 +625,51 @@ function bind() {
     "#close",
     "click",
     act(async () => {
-      if (await ask("結束這次邀約？之後仍可重新開放。"))
+      if (
+        await ask(
+          "完成統計並存檔？目前的日期、回覆與結果會固定保存，無法再修改。",
+        )
+      )
         event = await rpc("close", {}, admin);
     }),
   );
   on(
-    "#reopen",
+    "#delete-event",
     "click",
     act(async () => {
-      event = await rpc("reopen", {}, admin);
+      if (
+        !(await ask(
+          "刪除此存檔？邀請連結將無法查看。主揪可用管理連結還原，還原後仍維持唯讀。",
+        ))
+      )
+        return;
+      event = await rpc("delete", {}, admin);
+      toast("存檔已刪除；可用主揪管理連結還原。");
+    }),
+  );
+  on(
+    "#restore-event",
+    "click",
+    act(async () => {
+      event = await rpc("restore", {}, admin);
+      toast("存檔已還原，維持唯讀。");
+    }),
+  );
+  on(
+    "#refresh-library",
+    "click",
+    act(async () => {
+      const entries = knownEntries();
+      for (const entry of entries) {
+        try {
+          const identity = storage.get("ft:" + entry.id);
+          const fresh = await rpc("get", {}, identity?.admin || "", entry.id);
+          trackEvent(fresh);
+        } catch {
+          /* Another participant cannot see deleted archives. */
+        }
+      }
+      toast("已更新這台裝置的邀約紀錄");
     }),
   );
 }
@@ -609,7 +699,7 @@ async function sync() {
   const epoch = requestEpoch;
   syncing = true;
   try {
-    const fresh = await rpc("get");
+    const fresh = await rpc("get", {}, admin || "");
     // An editor or submission can start while the GET is in flight.
     if (dirty || busy || addMode || requestEpoch !== epoch) return;
     if (JSON.stringify(fresh) !== JSON.stringify(event)) {

@@ -53,3 +53,11 @@ test("所有共同時段都保留，不限三個", () =>
   ));
 test("日期採本地年月日，不受 UTC 換日影響", () =>
   assert.equal(dateKey(new Date(2026, 11, 1, 0)), "2026-12-01"));
+test("打球同日同人數時，早球先於午球", () => {
+  const slots = ["2026-12-01_afternoon", "2026-12-01_morning"];
+  const e = {
+    slots,
+    people: [person("主揪", Object.fromEntries(slots.map((s) => [s, true])))],
+  };
+  assert.equal(highlights(e).rows[0].slot, "2026-12-01_morning");
+});
