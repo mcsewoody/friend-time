@@ -504,6 +504,12 @@ a {
   .layout > section {
     order: 1;
   }
+  .event-layout > aside {
+    display: contents;
+  }
+  .event-layout .invitation-links {
+    order: 2;
+  }
 }
 @media (max-width: 480px) {
   header {
