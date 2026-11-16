@@ -402,17 +402,19 @@ test("月曆與週曆都含農曆及官方上班日標示，且保留上下午�
   }
 });
 
-test("調整打球預設不改動既有邀約的時間", async (t) => {
+test("隱藏側欄時段清單，既有打球存檔仍保留原時間", async (t) => {
   const doc = fixture();
   doc.type = "sport";
   doc.times = { morning: ["07:00", "10:00"], afternoon: ["13:00", "16:00"] };
   const s = slot.split("_")[0] + "_morning";
   doc.slots = [s];
+  doc.status = "closed";
+  doc.final = s;
   doc.people.forEach((p) => (p.answers = { [s]: true }));
   const a = await setup(t, { doc });
   const text = a.w.document.querySelector("#app").textContent;
   assert.match(text, /07:00–10:00/);
-  assert.match(text, /13:00–16:00/);
+  assert.equal(a.w.document.querySelectorAll("aside .people").length, 0);
   assert.equal(text.includes("06:00–09:00"), false);
 });
 function crossMonthFixture() {
