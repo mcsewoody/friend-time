@@ -510,6 +510,10 @@ a {
   .event-layout .invitation-links {
     order: 2;
   }
+  .calendar-sources,
+  .event-layout .legend {
+    display: none;
+  }
 }
 @media (max-width: 480px) {
   header {
