@@ -4,12 +4,18 @@ export const TYPES = {
   day: "整天",
   morning: "早球",
   afternoon: "午球",
+  am1: "上午 1",
+  am2: "上午 2",
+  pm1: "下午 1",
+  pm2: "下午 2",
 };
 export const EVENT_TYPES = {
   meal: { label: "吃飯", slots: ["lunch", "dinner"] },
   class: { label: "上課", slots: ["day"] },
   sport: { label: "打球", slots: ["morning", "afternoon"] },
+  meeting: { label: "會議", slots: ["am1", "am2", "pm1", "pm2"] },
 };
+const SLOT_ORDER = Object.keys(TYPES);
 export function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -50,12 +56,8 @@ export function rankSlots(event) {
       (a, b) =>
         b.yes.length - a.yes.length ||
         a.slot.split("_")[0].localeCompare(b.slot.split("_")[0]) ||
-        ["lunch", "dinner", "morning", "afternoon", "day"].indexOf(
-          a.slot.split("_")[1],
-        ) -
-          ["lunch", "dinner", "morning", "afternoon", "day"].indexOf(
-            b.slot.split("_")[1],
-          ),
+        SLOT_ORDER.indexOf(a.slot.split("_")[1]) -
+          SLOT_ORDER.indexOf(b.slot.split("_")[1]),
     );
 }
 export function highlights(event) {

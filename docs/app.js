@@ -8,7 +8,7 @@ import {
   highlights,
   candidateScope,
   visibleCandidates,
-} from "./domain.mjs?v=8";
+} from "./domain.mjs?v=9";
 import {
   dayInfo,
   calendarMetadata,
@@ -54,6 +54,10 @@ let draft = {
     day: ["09:00", "17:00"],
     morning: ["06:00", "09:00"],
     afternoon: ["10:00", "12:00"],
+    am1: ["09:00", "10:30"],
+    am2: ["10:30", "12:00"],
+    pm1: ["13:30", "15:30"],
+    pm2: ["15:30", "17:00"],
   },
 };
 let newName = "",
@@ -245,12 +249,16 @@ function calendar() {
               key > latestDate() ||
               (exists && !editingEvent)
             : mode === "results" || event.status !== "open";
-          return `<button class="slot slot-${t} ${cls}" data-slot="${s}" aria-label="${slotLabel(s)}${!selecting && mode === "fill" ? (answers[s] === false ? " 不行" : answers[s] === undefined ? " 待補答" : " 可以") : ""}" aria-pressed="${selecting ? chosen.has(s) || (!!exists && !editingEvent) : answers[s] === false}" ${disabled ? "disabled" : ""}>${txt}${sub ? `<small>${sub}</small>` : ""}</button>`;
+          return `<button class="slot slot-${t} ${cls}" data-slot="${s}" aria-label="${slotLabel(s)}${type === "meeting" ? " " + esc((editingEvent ? eventEdit.times : event?.times || draft.times)[t].join("–")) : ""}${!selecting && mode === "fill" ? (answers[s] === false ? " 不行" : answers[s] === undefined ? " 待補答" : " 可以") : ""}" aria-pressed="${selecting ? chosen.has(s) || (!!exists && !editingEvent) : answers[s] === false}" ${disabled ? "disabled" : ""}>${txt}${sub ? `<small>${sub}</small>` : ""}</button>`;
         })
         .join("") +
       "</div>";
   }
-  return `<div class="calendar-head"><h2>${cursor.getFullYear()} 年 ${cursor.getMonth() + 1} 月</h2><div class="nav"><button data-nav="-1" aria-label="上一${view === "month" ? "月" : "週"}">←</button><button data-nav="0">今天</button><button data-nav="1" aria-label="下一${view === "month" ? "月" : "週"}">→</button></div></div><div class="view-switch"><button data-view="month" class="${view === "month" ? "active" : ""}">月曆</button><button data-view="week" class="${view === "week" ? "active" : ""}">週曆</button></div><div class="weekdays">${["日", "一", "二", "三", "四", "五", "六"].map((x) => `<span>${x}</span>`).join("")}</div><div class="calendar ${view === "week" ? "week" : ""}">${cells}</div>${calendarSources()}`;
+  const meetingSchedule =
+    type === "meeting"
+      ? `<div class="meeting-schedule" aria-label="會議時段">${types.map((t) => `<span data-meeting-time="${t}"><strong>${TYPES[t]}</strong> ${esc((editingEvent ? eventEdit.times : event?.times || draft.times)[t].join("–"))}</span>`).join("")}</div>`
+      : "";
+  return `${meetingSchedule}<div class="calendar-head"><h2>${cursor.getFullYear()} 年 ${cursor.getMonth() + 1} 月</h2><div class="nav"><button data-nav="-1" aria-label="上一${view === "month" ? "月" : "週"}">←</button><button data-nav="0">今天</button><button data-nav="1" aria-label="下一${view === "month" ? "月" : "週"}">→</button></div></div><div class="view-switch"><button data-view="month" class="${view === "month" ? "active" : ""}">月曆</button><button data-view="week" class="${view === "week" ? "active" : ""}">週曆</button></div><div class="weekdays">${["日", "一", "二", "三", "四", "五", "六"].map((x) => `<span>${x}</span>`).join("")}</div><div class="calendar ${view === "week" ? "week" : ""} ${type === "meeting" ? "meeting" : ""}">${cells}</div>${calendarSources()}`;
 }
 function calendarSources() {
   const years = new Set([cursor.getFullYear()]);
@@ -298,14 +306,14 @@ async function openAlmanac(key) {
 function createPage() {
   return (
     top("好久不見，約個時間。", "圈出你有空的日子，剩下的，一起決定。") +
-    `<div class="layout"><aside><div class="card"><div class="step">01 / 這次想約什麼</div><h2>建立一個邀約</h2><label>邀約名稱<input id="title" maxlength="80" placeholder="例如：老朋友的週末聚餐" value="${esc(draft.title)}"></label><div class="segmented"><button data-type="meal" class="${draft.type === "meal" ? "active" : ""}">A · 吃飯</button><button data-type="class" class="${draft.type === "class" ? "active" : ""}">B · 上課</button><button data-type="sport" class="${draft.type === "sport" ? "active" : ""}">C · 打球</button></div>${timesInputs()}<label>你的名字（主揪）<input id="host" maxlength="30" placeholder="大家怎麼稱呼你？" value="${esc(draft.host)}"></label><label>受邀朋友 <span class="muted">選填</span><textarea id="names" placeholder="每行一位，或用逗號分隔">${esc(draft.names)}</textarea></label><small>先填名單，就能知道還在等誰。朋友也可以自行新增名字。</small></div></aside><section><div class="card"><div class="step">02 / 先圈選你可以的時間</div><h2>你的時間，是邀約的起點。</h2><p class="muted">可跨月份選擇；${draft.type === "sport" ? "早球、午球分開計算，時段代表 tee off 開球時間範圍。" : draft.type === "class" ? "每個日期代表完整白天。" : EVENT_TYPES[draft.type].slots.map((t) => TYPES[t]).join("、") + "分開計算。"}</p><div id="cal">${calendar()}</div><div class="legend"><span><i class="dot"></i>已選可行時間</span><span><i class="dot gray"></i>點一下加入，再點取消</span></div><div class="calendar-foot"><div><span class="count">${chosen.size}</span> 個候選時段</div><button id="create" class="primary" ${busy ? "disabled" : ""}>建立邀約，取得連結 →</button></div></div><small>免登入 · 朋友各自填寫 · 自動找出共同時間</small></section></div>`
+    `<div class="layout"><aside><div class="card"><div class="step">01 / 這次想約什麼</div><h2>建立一個邀約</h2><label>邀約名稱<input id="title" maxlength="80" placeholder="例如：老朋友的週末聚餐" value="${esc(draft.title)}"></label><div class="segmented"><button data-type="meal" class="${draft.type === "meal" ? "active" : ""}">A · 吃飯</button><button data-type="class" class="${draft.type === "class" ? "active" : ""}">B · 上課</button><button data-type="sport" class="${draft.type === "sport" ? "active" : ""}">C · 打球</button><button data-type="meeting" class="${draft.type === "meeting" ? "active" : ""}">D · 會議</button></div>${timesInputs()}<label>你的名字（主揪）<input id="host" maxlength="30" placeholder="大家怎麼稱呼你？" value="${esc(draft.host)}"></label><label>受邀朋友 <span class="muted">選填</span><textarea id="names" placeholder="每行一位，或用逗號分隔">${esc(draft.names)}</textarea></label><small>先填名單，就能知道還在等誰。朋友也可以自行新增名字。</small></div></aside><section><div class="card"><div class="step">02 / 先圈選你可以的時間</div><h2>你的時間，是邀約的起點。</h2><p class="muted">可跨月份選擇；${draft.type === "sport" ? "早球、午球分開計算，時段代表 tee off 開球時間範圍。" : draft.type === "class" ? "每個日期代表完整白天。" : EVENT_TYPES[draft.type].slots.map((t) => TYPES[t]).join("、") + "分開計算。"}</p><div id="cal">${calendar()}</div><div class="legend"><span><i class="dot"></i>已選可行時間</span><span><i class="dot gray"></i>點一下加入，再點取消</span></div><div class="calendar-foot"><div><span class="count">${chosen.size}</span> 個候選時段</div><button id="create" class="primary" ${busy ? "disabled" : ""}>建立邀約，取得連結 →</button></div></div><small>免登入 · 朋友各自填寫 · 自動找出共同時間</small></section></div>`
   );
 }
 function resultRows(rows) {
   return rows
     .map(
       (r, i) =>
-        `<div class="result-row"><div class="result-title"><strong>${i + 1}. ${esc(slotLabel(r.slot))}</strong><span class="badge">${r.yes.length} 人可以</span></div><div class="people">可以：${esc(r.yes.join("、") || "尚無")}</div>${r.no.length ? `<div class="people no-text">不行：${esc(r.no.join("、"))}</div>` : ""}${r.pending.length ? `<div class="people">待確認：${esc(r.pending.join("、"))}</div>` : ""}${admin && event.status === "open" ? `<button data-final="${r.slot}">確定這個時間</button>` : ""}</div>`,
+        `<div class="result-row"><div class="result-title"><strong>${i + 1}. ${esc(slotLabel(r.slot))}${event.type === "meeting" ? " · " + esc(event.times[r.slot.split("_")[1]].join("–")) : ""}</strong><span class="badge">${r.yes.length} 人可以</span></div><div class="people">可以：${esc(r.yes.join("、") || "尚無")}</div>${r.no.length ? `<div class="people no-text">不行：${esc(r.no.join("、"))}</div>` : ""}${r.pending.length ? `<div class="people">待確認：${esc(r.pending.join("、"))}</div>` : ""}${admin && event.status === "open" ? `<button data-final="${r.slot}">確定這個時間</button>` : ""}</div>`,
     )
     .join("");
 }
@@ -565,6 +573,9 @@ function bind() {
   on("[data-time]", "input", (e) => {
     const [t, i] = e.target.dataset.time.split(":");
     draft.times[t][i] = e.target.value;
+    const summary = document.querySelector(`[data-meeting-time="${t}"]`);
+    if (summary)
+      summary.textContent = TYPES[t] + " " + draft.times[t].join("–");
   });
   on(
     "#create",
@@ -723,6 +734,9 @@ function bind() {
   on("[data-edit-time]", "input", (e) => {
     const [t, i] = e.target.dataset.editTime.split(":");
     eventEdit.times[t][i] = e.target.value;
+    const summary = document.querySelector(`[data-meeting-time="${t}"]`);
+    if (summary)
+      summary.textContent = TYPES[t] + " " + eventEdit.times[t].join("–");
   });
   on("#host-availability", "click", () => {
     pid = event.hostId;

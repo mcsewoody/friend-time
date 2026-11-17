@@ -100,3 +100,18 @@ test("週曆跨年只記錄當週實際顯示的候選，不把整個月當成�
     slots.slice(1),
   );
 });
+
+test("會議四時段按上午1、上午2、下午1、下午2排序，交集不混入其他類型", async () => {
+  const { EVENT_TYPES, TYPES, slotLabel } = await import("../docs/domain.mjs");
+  assert.deepEqual(EVENT_TYPES.meeting.slots, ["am1", "am2", "pm1", "pm2"]);
+  const slots = ["pm2", "am2", "pm1", "am1"].map((t) => "2026-12-01_" + t);
+  const answers = Object.fromEntries(slots.map((s) => [s, true]));
+  assert.deepEqual(
+    rankSlots({ slots, people: [person("主揪", answers)] }).map(
+      (r) => r.slot.split("_")[1],
+    ),
+    ["am1", "am2", "pm1", "pm2"],
+  );
+  assert.equal(slotLabel(slots[0]), "2026-12-01 下午 2");
+  assert.equal(TYPES.am1, "上午 1");
+});

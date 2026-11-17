@@ -23,6 +23,12 @@ await db.exec(
     "utf8",
   ),
 );
+await db.exec(
+  await fs.readFile(
+    new URL("../database/004_meeting_slots.sql", import.meta.url),
+    "utf8",
+  ),
+);
 const token = () => randomUUID() + randomUUID(),
   admin = token(),
   member = token(),
@@ -336,4 +342,102 @@ test("編輯邀約保留有效答案，時段變更須補答，並拒絕過期�
     /無法修改/,
   );
   assert.equal((await api("get", {}, "", eid)).status, "closed");
+});
+
+test("會議建立四時段、個別回覆、追加待補答、修改時間及存檔", async () => {
+  const eid = randomUUID(),
+    key = token(),
+    friend = token(),
+    fid = randomUUID();
+  const slots = ["am1", "am2", "pm1", "pm2"].map((t) => date + "_" + t);
+  const times = {
+    am1: ["09:00", "10:30"],
+    am2: ["10:30", "12:00"],
+    pm1: ["13:30", "15:30"],
+    pm2: ["15:30", "17:00"],
+  };
+  let d = await api(
+    "create",
+    { title: "會議", host: "主揪", type: "meeting", names: [], slots, times },
+    key,
+    eid,
+  );
+  assert.deepEqual(d.times, times);
+  assert.equal(d.slots.length, 4);
+  d = await api(
+    "respond",
+    {
+      pid: fid,
+      name: "同事",
+      answers: Object.fromEntries(slots.map((s, i) => [s, i !== 2])),
+    },
+    friend,
+    eid,
+  );
+  assert.equal(d.people[1].answers[slots[2]], false);
+  const newDate = new Date(date + "T12:00:00Z");
+  newDate.setUTCDate(newDate.getUTCDate() + 1);
+  const extra = newDate.toISOString().slice(0, 10) + "_pm2";
+  d = await api("append", { slots: [extra] }, key, eid);
+  assert.equal(d.people[1].answers[extra], undefined);
+  const edit = {
+    base_title: d.title,
+    base_slots: d.slots,
+    base_times: d.times,
+    title: d.title,
+    slots: d.slots,
+    times: { ...times, am1: ["09:15", "10:30"] },
+  };
+  d = await api("edit_event", edit, key, eid);
+  assert.equal(d.people[1].answers[slots[0]], undefined);
+  assert.equal(d.people[1].answers[slots[1]], true);
+  d = await api("finalize", { slot: slots[3] }, key, eid);
+  assert.equal(d.final, slots[3]);
+  assert.equal(d.archived, true);
+  await assert.rejects(
+    api("host_respond", { pid: d.hostId, name: "主揪", answers: {} }, key, eid),
+    /已關閉/,
+  );
+});
+test("會議拒絕其他主題時段、缺少或錯誤時間；其他主題拒絕會議時段", async () => {
+  const times = {
+    am1: ["09:00", "10:30"],
+    am2: ["10:30", "12:00"],
+    pm1: ["13:30", "15:30"],
+    pm2: ["15:30", "17:00"],
+  };
+  const input = {
+    title: "會議",
+    host: "主揪",
+    type: "meeting",
+    names: [],
+    slots: [date + "_am1"],
+    times,
+  };
+  await assert.rejects(
+    api("create", { ...input, slots: [lunch] }, token(), randomUUID()),
+    /類型/,
+  );
+  await assert.rejects(
+    api(
+      "create",
+      { ...input, times: { am1: times.am1 } },
+      token(),
+      randomUUID(),
+    ),
+    /時間/,
+  );
+  await assert.rejects(
+    api(
+      "create",
+      { ...input, times: { ...times, pm2: ["17:00", "15:30"] } },
+      token(),
+      randomUUID(),
+    ),
+    /時間/,
+  );
+  await assert.rejects(
+    api("create", { ...input, type: "meal" }, token(), randomUUID()),
+    /類型/,
+  );
 });

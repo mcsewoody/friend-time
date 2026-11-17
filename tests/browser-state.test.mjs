@@ -621,3 +621,63 @@ test("儲存主揪編輯送出原始版本與新名稱時段，確認前不寫�
   assert.equal(request.p_data.base_title, "聚餐");
   assert.deepEqual(request.p_data.base_slots, [slot]);
 });
+
+test("會議主題具四個正確預設時間，切換主題清除先前候選", async (t) => {
+  const a = await setup(t, { hash: "" });
+  a.click(`[data-slot="${slot}"]`);
+  a.click('[data-type="meeting"]');
+  const expected = {
+    "上午 1": ["09:00", "10:30"],
+    "上午 2": ["10:30", "12:00"],
+    "下午 1": ["13:30", "15:30"],
+    "下午 2": ["15:30", "17:00"],
+  };
+  for (const [label, times] of Object.entries(expected)) {
+    assert.equal(
+      a.w.document.querySelector(`[aria-label="${label}開始"]`).value,
+      times[0],
+    );
+    assert.equal(
+      a.w.document.querySelector(`[aria-label="${label}結束"]`).value,
+      times[1],
+    );
+  }
+  assert.equal(
+    a.w.document.querySelectorAll('.slot[aria-pressed="true"]').length,
+    0,
+  );
+  assert.equal(
+    a.w.document.querySelectorAll(".meeting-schedule span").length,
+    4,
+  );
+  assert.ok(a.w.document.querySelector(".calendar.meeting"));
+});
+test("會議僅下午2也固定四列，月週曆與統計均顯示正確時間", async (t) => {
+  const doc = fixture();
+  doc.type = "meeting";
+  doc.times = {
+    am1: ["09:00", "10:30"],
+    am2: ["10:30", "12:00"],
+    pm1: ["13:30", "15:30"],
+    pm2: ["15:30", "17:00"],
+  };
+  const s = date.toISOString().slice(0, 10) + "_pm2";
+  doc.slots = [s];
+  doc.people.forEach((p) => (p.answers = { [s]: true }));
+  const a = await setup(t, { doc });
+  for (const view of ["month", "week"]) {
+    a.click(`[data-view="${view}"]`);
+    const button = a.w.document.querySelector(`[data-slot="${s}"]`);
+    assert.equal(
+      button.parentElement.querySelectorAll(".slot-space").length,
+      3,
+    );
+    assert.equal(button.parentElement.lastElementChild, button);
+    assert.match(button.getAttribute("aria-label"), /下午 2 15:30–17:00/);
+  }
+  a.click('[data-mode="results"]');
+  assert.match(
+    a.w.document.querySelector(".result-row").textContent,
+    /下午 2 · 15:30–17:00/,
+  );
+});

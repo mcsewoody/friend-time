@@ -987,3 +987,33 @@ header nav {
     padding: 7px 10px;
   }
 }
+
+/* Meeting slots reserve four stable rows in month and week views. */
+.calendar.meeting .day {
+  grid-template-rows: minmax(max-content, 1fr) repeat(4, 44px);
+  min-height: 0;
+}
+.slot-am1 {
+  grid-row: 2;
+}
+.slot-am2 {
+  grid-row: 3;
+}
+.slot-pm1 {
+  grid-row: 4;
+}
+.slot-pm2 {
+  grid-row: 5;
+}
+.meeting-schedule {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0 0 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.meeting-schedule strong {
+  color: var(--green);
+  margin-right: 5px;
+}
