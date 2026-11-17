@@ -2,7 +2,9 @@
 
 免登入的聚餐／上課／打球時間協調工具。主揪圈選候選時間，朋友各自排除不能參加的時段，以月曆或週曆查看交集。
 
-正式網站：https://comartgroup.github.io/friend-time/
+正式網站：https://mcsewoody.github.io/friend-time/
+
+原站保留：https://comartgroup.github.io/friend-time/
 
 ## 使用
 
@@ -95,3 +97,9 @@ npm test
 - 首頁僅列本人主揪紀錄，朋友邀約不列入；朋友原邀請連結仍可查看該次統計。免登入模式下，以此瀏覽器保存的管理憑證判定主揪；換裝置需原主揪管理連結，並非登入帳號下的跨裝置清單。
 - 部署時依序套用 001、002、003；已安裝前版的正式環境僅需執行 `database/003_host_edit_private_library.sql`。不修改既有邀約資料。
 - 61 項測試通過，涵蓋主揪權限、過期編輯、回覆保留、結束後禁止修改、首頁隔離及介面操作。
+
+## mcsewoody 維護副本
+
+本副本保留完整 Git 歷史，由 mcsewoody/friend-time 發布。原 comartgroup 專案與網站保留；兩站使用同一 Supabase 邀約資料。兩站不是獨立資料副本，編輯或結束同一邀約會反映到兩站。
+
+瀏覽器憑證與首頁紀錄不會跨網域自動搬移。既有邀請／主揪管理／私人修改連結可將網址開頭 `https://comartgroup.github.io/friend-time/` 換成 `https://mcsewoody.github.io/friend-time/`，`#` 後的完整內容需保留。以主揪管理連結成功開啟後，新站會記住該次主揪紀錄。管理連結不可分享給朋友。
