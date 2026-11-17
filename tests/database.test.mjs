@@ -17,6 +17,12 @@ await db.exec(
     "utf8",
   ),
 );
+await db.exec(
+  await fs.readFile(
+    new URL("../database/003_host_edit_private_library.sql", import.meta.url),
+    "utf8",
+  ),
+);
 const token = () => randomUUID() + randomUUID(),
   admin = token(),
   member = token(),
@@ -238,4 +244,96 @@ test("進行中邀約不能直接刪除，完成統計後才能刪除", async ()
   assert.ok(archived.archivedAt);
   await assert.rejects(api("close", {}, key, eid), /無法修改/);
   assert.equal((await api("delete", {}, key, eid)).deleted, true);
+});
+
+test("主揪修改自己的時間，朋友不可冒用；追加日期保留原不行狀態", async () => {
+  const eid = randomUUID(),
+    key = token();
+  let d = await api(
+    "create",
+    {
+      title: "主揪修改",
+      host: "主揪",
+      type: "meal",
+      times: { lunch: ["12:00", "14:00"], dinner: ["18:00", "21:00"] },
+      names: [],
+      slots: [lunch],
+    },
+    key,
+    eid,
+  );
+  await assert.rejects(
+    api(
+      "host_respond",
+      { pid: d.hostId, name: "主揪", answers: { [lunch]: false } },
+      token(),
+      eid,
+    ),
+    /管理連結/,
+  );
+  d = await api(
+    "host_respond",
+    { pid: d.hostId, name: "主揪", answers: { [lunch]: false } },
+    key,
+    eid,
+  );
+  assert.equal(d.people[0].answers[lunch], false);
+  d = await api("append", { slots: [dinner] }, key, eid);
+  assert.equal(d.people[0].answers[lunch], false);
+  assert.equal(d.people[0].answers[dinner], true);
+});
+test("編輯邀約保留有效答案，時段變更須補答，並拒絕過期編輯與存檔編輯", async () => {
+  const eid = randomUUID(),
+    key = token(),
+    friend = token(),
+    fid = randomUUID();
+  let d = await api(
+    "create",
+    {
+      title: "原名",
+      host: "主揪",
+      type: "meal",
+      times: { lunch: ["12:00", "14:00"], dinner: ["18:00", "21:00"] },
+      names: [],
+      slots: [lunch, dinner],
+    },
+    key,
+    eid,
+  );
+  d = await api(
+    "respond",
+    { pid: fid, name: "朋友", answers: { [lunch]: false, [dinner]: true } },
+    friend,
+    eid,
+  );
+  const edit = {
+    base_title: d.title,
+    base_slots: d.slots,
+    base_times: d.times,
+    title: "新名",
+    slots: [lunch, dinner],
+    times: { ...d.times, dinner: ["19:00", "21:00"] },
+  };
+  await assert.rejects(api("edit_event", edit, friend, eid), /管理連結/);
+  d = await api("edit_event", edit, key, eid);
+  assert.equal(d.title, "新名");
+  assert.equal(d.people[1].answers[lunch], false);
+  assert.equal(d.people[1].answers[dinner], undefined);
+  await assert.rejects(api("edit_event", edit, key, eid), /已變更/);
+  const remove = {
+    base_title: d.title,
+    base_slots: d.slots,
+    base_times: d.times,
+    title: d.title,
+    slots: [dinner],
+    times: d.times,
+  };
+  d = await api("edit_event", remove, key, eid);
+  assert.equal(d.people[1].answers[lunch], undefined);
+  await api("close", {}, key, eid);
+  await assert.rejects(
+    api("edit_event", { ...remove, base_slots: d.slots }, key, eid),
+    /無法修改/,
+  );
+  assert.equal((await api("get", {}, "", eid)).status, "closed");
 });

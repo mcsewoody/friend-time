@@ -59,7 +59,11 @@ const flush = async () => {
 };
 async function setup(
   t,
-  { doc = fixture(), hash = `e=${id}&p=${pid}&edit=${key}` } = {},
+  {
+    doc = fixture(),
+    hash = `e=${id}&p=${pid}&edit=${key}`,
+    storageData = {},
+  } = {},
 ) {
   const dom = new JSDOM(shell, {
     url: "https://example.com/#" + hash,
@@ -68,6 +72,8 @@ async function setup(
   });
   t.after(() => dom.window.close());
   const w = dom.window;
+  for (const [k, v] of Object.entries(storageData))
+    w.localStorage.setItem(k, JSON.stringify(v));
   let interval,
     calls = [],
     next;
@@ -528,4 +534,90 @@ test("首次填寫取消跨月提醒後，仍可選擇受邀者身分", async (t
     a.calls.some((c) => c.p_action === "respond"),
     false,
   );
+});
+
+test("首頁只列本人主揪紀錄，既有參與者紀錄不再顯示", async (t) => {
+  const other = "22345678-1234-4234-8234-123456789012";
+  const a = await setup(t, {
+    hash: "",
+    storageData: {
+      "ft:library": [
+        { id, title: "我的邀約", status: "open" },
+        { id: other, title: "別人的邀約", status: "closed" },
+      ],
+      ["ft:" + id]: { admin: key },
+      ["ft:" + other]: { pid, edit: key },
+    },
+  });
+  assert.equal(a.w.document.querySelectorAll(".archive-row").length, 1);
+  assert.match(a.w.document.querySelector(".library").textContent, /我的邀約/);
+  assert.doesNotMatch(
+    a.w.document.querySelector(".library").textContent,
+    /別人的邀約/,
+  );
+});
+test("開啟朋友邀約不列入本人主揪紀錄", async (t) => {
+  const a = await setup(t);
+  assert.equal(a.w.localStorage.getItem("ft:library"), null);
+});
+test("主揪可修改自己時間；結束是單一存檔按鈕", async (t) => {
+  const doc = fixture();
+  const a = await setup(t, { doc, hash: `e=${id}&admin=${key}` });
+  assert.equal(a.w.document.querySelector("#close").textContent, "結束並存檔");
+  a.click("#host-availability");
+  assert.ok(a.w.document.querySelector("#submit"));
+  a.click(`[data-slot="${slot}"]`);
+  a.click("#submit");
+  await flush();
+  if (a.w.document.querySelector("dialog .primary")) {
+    a.click("dialog .primary");
+    await flush();
+  }
+  const request = a.calls.find((x) => x.p_action === "host_respond");
+  assert.ok(request);
+  assert.equal(request.p_data.pid, doc.hostId);
+  assert.equal(request.p_data.answers[slot], false);
+  assert.equal(JSON.parse(a.w.localStorage.getItem("ft:" + id)).admin, key);
+});
+test("主揪編輯預選既有日期，取消不寫入；存檔隱藏編輯入口", async (t) => {
+  const a = await setup(t, { hash: `e=${id}&admin=${key}` });
+  a.click("#edit-event");
+  assert.equal(a.w.document.querySelector("#edit-title").value, "聚餐");
+  const before = a.calls.length;
+  a.click(`[data-slot="${slot}"]`);
+  assert.equal(
+    a.w.document
+      .querySelector(`[data-slot="${slot}"]`)
+      .getAttribute("aria-pressed"),
+    "false",
+  );
+  a.click("#cancel-add");
+  assert.equal(a.calls.length, before);
+  assert.equal(a.w.document.querySelector("#edit-title"), null);
+  a.setDoc({ ...fixture(), status: "closed", archived: true });
+  a.click("#refresh");
+  await flush();
+  assert.equal(a.w.document.querySelector("#edit-event"), null);
+  assert.equal(a.w.document.querySelector("#host-availability"), null);
+});
+
+test("儲存主揪編輯送出原始版本與新名稱時段，確認前不寫入", async (t) => {
+  const a = await setup(t, { hash: `e=${id}&admin=${key}` });
+  a.click("#edit-event");
+  const input = a.w.document.querySelector("#edit-title");
+  input.value = "新聚餐";
+  input.dispatchEvent(new a.w.Event("input", { bubbles: true }));
+  a.click("#save-add");
+  await flush();
+  assert.equal(
+    a.calls.some((x) => x.p_action === "edit_event"),
+    false,
+  );
+  a.click("dialog .primary");
+  await flush();
+  const request = a.calls.find((x) => x.p_action === "edit_event");
+  assert.ok(request);
+  assert.equal(request.p_data.title, "新聚餐");
+  assert.equal(request.p_data.base_title, "聚餐");
+  assert.deepEqual(request.p_data.base_slots, [slot]);
 });

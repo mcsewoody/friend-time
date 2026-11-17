@@ -8,7 +8,7 @@ import {
   highlights,
   candidateScope,
   visibleCandidates,
-} from "./domain.mjs?v=5";
+} from "./domain.mjs?v=8";
 import {
   dayInfo,
   calendarMetadata,
@@ -59,7 +59,9 @@ let draft = {
 let newName = "",
   selectedPid = "",
   addMode = false,
-  creation = null;
+  creation = null,
+  editingEvent = false,
+  eventEdit = null;
 let requestEpoch = 0,
   syncing = false;
 const openedSlots = new Set();
@@ -218,8 +220,9 @@ function calendar() {
             txt = TYPES[t],
             sub = "";
           if (selecting) {
-            cls = chosen.has(s) || exists ? "selected" : "";
-            txt = (chosen.has(s) || exists ? "✓ " : "") + txt;
+            cls = chosen.has(s) || (exists && !editingEvent) ? "selected" : "";
+            txt =
+              (chosen.has(s) || (exists && !editingEvent) ? "✓ " : "") + txt;
           } else if (mode === "results") {
             cls = r.common ? "selected" : "";
             sub = `${r.yes.length}/${event.people.filter((p) => p.submitted).length} 人`;
@@ -238,9 +241,11 @@ function calendar() {
                   : "✓ ") + txt;
           }
           const disabled = selecting
-            ? key < taipeiToday() || key > latestDate() || exists
+            ? (key < taipeiToday() && !(editingEvent && exists)) ||
+              key > latestDate() ||
+              (exists && !editingEvent)
             : mode === "results" || event.status !== "open";
-          return `<button class="slot slot-${t} ${cls}" data-slot="${s}" aria-label="${slotLabel(s)}${!selecting && mode === "fill" ? (answers[s] === false ? " 不行" : answers[s] === undefined ? " 待補答" : " 可以") : ""}" aria-pressed="${selecting ? chosen.has(s) || !!exists : answers[s] === false}" ${disabled ? "disabled" : ""}>${txt}${sub ? `<small>${sub}</small>` : ""}</button>`;
+          return `<button class="slot slot-${t} ${cls}" data-slot="${s}" aria-label="${slotLabel(s)}${!selecting && mode === "fill" ? (answers[s] === false ? " 不行" : answers[s] === undefined ? " 待補答" : " 可以") : ""}" aria-pressed="${selecting ? chosen.has(s) || (!!exists && !editingEvent) : answers[s] === false}" ${disabled ? "disabled" : ""}>${txt}${sub ? `<small>${sub}</small>` : ""}</button>`;
         })
         .join("") +
       "</div>";
@@ -337,7 +342,7 @@ function eventPage() {
       locked ? "已存檔 · 唯讀" : "邀約進行中",
     ) +
     invitationScope() +
-    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}${event.type === "sport" ? " tee off" : ""}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout event-layout"><aside><div class="card invitation-links"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2><label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="delete-event" class="danger">刪除此存檔</button>' : '<button id="add">追加日期</button><button id="close">完成統計並存檔</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${
+    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}${event.type === "sport" ? " tee off" : ""}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout event-layout"><aside><div class="card invitation-links"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2><label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="delete-event" class="danger">刪除此存檔</button>' : '<button id="edit-event">編輯邀約</button><button id="host-availability">修改我的時間</button><button id="add">追加日期</button><button id="close">結束並存檔</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${
       !admin && !locked
         ? `<div class="card"><div class="step">01 / 你是哪一位</div>${
             own
@@ -353,10 +358,11 @@ function eventPage() {
                   )}</select></label>${!selectedPid ? `<label>你的名字<input id="newname" maxlength="30" placeholder="請使用容易辨識的名字" value="${esc(newName)}"></label>` : ""}<small>已填寫的名字需使用原裝置或私人修改連結。</small>`
           }</div>`
         : ""
-    }</aside><section><div class="tabs">${!admin && !locked ? `<button data-mode="fill" class="${mode === "fill" ? "active" : ""}">填寫我的時間</button>` : ""}<button data-mode="results" class="${mode === "results" ? "active" : ""}">查看統計</button><button id="refresh">更新</button><small id="sync">每 20 秒同步</small></div>${addMode ? `<div class="card"><h2>追加你可以的日期</h2><p class="muted">既有回覆保留；新時段會請朋友補答。</p>${calendar()}<div class="calendar-foot"><span>新增 ${chosen.size} 個時段</span><button id="save-add" class="primary">儲存追加日期</button><button id="cancel-add">取消</button></div></div>` : `<div class="card"><div class="step">${mode === "fill" ? "02 / 排除不能參加的時間" : "月曆總覽"}</div><h2>${mode === "fill" ? "把不行的時間，輕輕劃掉。" : "每個時間，有誰能來？"}</h2>${mode === "fill" ? '<p class="muted">請標記不能參加的時間，其餘時段送出後視為可以。黃色 ? 代表新增待補答。</p><div class="actions"><button id="all-yes">全部都可以</button><button id="all-no">全部都不行</button></div><br>' : ""}${calendar()}${mode === "fill" ? `<div class="legend"><span><i class="dot"></i>可以</span><span><i class="dot red"></i>不行</span></div>${submissionScope()}<div class="calendar-foot"><span>可以 ${event.slots.filter((s) => answers[s] === true).length} 個／不行 ${event.slots.filter((s) => answers[s] === false).length} 個${event.slots.some((s) => answers[s] === undefined) ? `／待補答 ${event.slots.filter((s) => answers[s] === undefined).length} 個` : ""}</span><button id="submit" class="primary" ${busy ? "disabled" : ""}>確認送出</button></div>` : ""}</div>${mode === "results" ? results() : ""}`}</section></div>`
+    }</aside><section><div class="tabs">${!locked ? `<button data-mode="fill" class="${mode === "fill" ? "active" : ""}">${admin ? "主揪的時間" : "填寫我的時間"}</button>` : ""}<button data-mode="results" class="${mode === "results" ? "active" : ""}">查看統計</button><button id="refresh">更新</button><small id="sync">每 20 秒同步</small></div>${addMode ? `<div class="card"><h2>${editingEvent ? "編輯邀約" : "追加你可以的日期"}</h2>${editingEvent ? `<label>邀約名稱<input id="edit-title" maxlength="80" value="${esc(eventEdit.title)}"></label>${EVENT_TYPES[event.type].slots.map((t) => `<label>${TYPES[t]}<div class="times"><input type="time" data-edit-time="${t}:0" value="${esc(eventEdit.times[t][0])}"><input type="time" data-edit-time="${t}:1" value="${esc(eventEdit.times[t][1])}"></div></label>`).join("")}` : ""}<p class="muted">${editingEvent ? "點選可加入或移除日期；刪除的選項會移除其回覆，改動時段會請朋友補答。" : "既有回覆保留；新時段會請朋友補答。"}</p>${calendar()}<div class="calendar-foot"><span>${editingEvent ? "保留" : "新增"} ${chosen.size} 個時段</span><button id="save-add" class="primary">${editingEvent ? "儲存邀約變更" : "儲存追加日期"}</button><button id="cancel-add">取消</button></div></div>` : `<div class="card"><div class="step">${mode === "fill" ? "02 / 排除不能參加的時間" : "月曆總覽"}</div><h2>${mode === "fill" ? "把不行的時間，輕輕劃掉。" : "每個時間，有誰能來？"}</h2>${mode === "fill" ? '<p class="muted">請標記不能參加的時間，其餘時段送出後視為可以。黃色 ? 代表新增待補答。</p><div class="actions"><button id="all-yes">全部都可以</button><button id="all-no">全部都不行</button></div><br>' : ""}${calendar()}${mode === "fill" ? `<div class="legend"><span><i class="dot"></i>可以</span><span><i class="dot red"></i>不行</span></div>${submissionScope()}<div class="calendar-foot"><span>可以 ${event.slots.filter((s) => answers[s] === true).length} 個／不行 ${event.slots.filter((s) => answers[s] === false).length} 個${event.slots.some((s) => answers[s] === undefined) ? `／待補答 ${event.slots.filter((s) => answers[s] === undefined).length} 個` : ""}</span><button id="submit" class="primary" ${busy ? "disabled" : ""}>確認送出</button></div>` : ""}</div>${mode === "results" ? results() : ""}`}</section></div>`
   );
 }
 function trackEvent(doc) {
+  if (!storage.get("ft:" + doc.id)?.admin) return;
   const entries = (storage.get("ft:library") || []).filter(
     (e) => e.id !== doc.id,
   );
@@ -370,12 +376,14 @@ function trackEvent(doc) {
   storage.set("ft:library", entries);
 }
 function knownEntries() {
-  const entries = storage.get("ft:library") || [];
+  const entries = (storage.get("ft:library") || []).filter(
+    (e) => storage.get("ft:" + e.id)?.admin,
+  );
   try {
     for (const key of Object.keys(localStorage)) {
       if (
         /^ft:[a-f0-9-]{36}$/.test(key) &&
-        storage.get(key) &&
+        storage.get(key)?.admin &&
         !entries.some((e) => e.id === key.slice(3))
       )
         entries.push({
@@ -390,7 +398,7 @@ function knownEntries() {
 function library() {
   // The cloud keeps the archive; this browser keeps only its link index.
   const entries = knownEntries();
-  return `<div class="card library"><div class="step">這台裝置的邀約紀錄</div><h2>進行中與已存檔</h2><small>僅列出你在這個瀏覽器開啟過的邀約。換裝置請使用原邀請／管理連結；完成的結果保存在雲端。</small><button id="refresh-library">更新紀錄</button>${entries.length ? entries.map((e) => `<a class="archive-row" href="#${new URLSearchParams({ e: e.id })}"><strong>${esc(e.title)}</strong><span class="badge">${e.deleted ? "已刪除 · 主揪可還原" : e.status === "unknown" ? "待更新" : e.status === "open" ? "進行中" : "已存檔 · 唯讀"}</span></a>`).join("") : '<p class="muted">建立或開啟邀約後，紀錄會出現在這裡。</p>'}</div>`;
+  return `<div class="card library"><div class="step">我的主揪紀錄</div><h2>進行中與已存檔</h2><small>僅列出此瀏覽器保留主揪管理憑證的邀約，不列出參加別人的紀錄。換裝置請使用你的主揪管理連結。</small><button id="refresh-library">更新紀錄</button>${entries.length ? entries.map((e) => `<a class="archive-row" href="#${new URLSearchParams({ e: e.id })}"><strong>${esc(e.title)}</strong><span class="badge">${e.deleted ? "已刪除 · 主揪可還原" : e.status === "unknown" ? "待更新" : e.status === "open" ? "進行中" : "已存檔 · 唯讀"}</span></a>`).join("") : '<p class="muted">建立或開啟邀約後，紀錄會出現在這裡。</p>'}</div>`;
 }
 function deletedPage() {
   return (
@@ -412,7 +420,7 @@ function render() {
     : null;
   if (event) {
     trackEvent(event);
-    if (!admin && event.status === "open" && mode === "fill") {
+    if (event.status === "open" && mode === "fill") {
       visibleCandidates(event.slots, cursor, view).forEach((slot) =>
         openedSlots.add(slot),
       );
@@ -479,6 +487,7 @@ async function load() {
   if (admin) {
     await rpc("verify", {}, admin);
     mode = "results";
+    pid = event.hostId;
   }
   if (edit && pid) {
     if (event.people.some((p) => p.id === pid && p.submitted))
@@ -594,6 +603,8 @@ function bind() {
       storage.set("ft:" + eid, { admin });
       history.replaceState(null, "", link({ admin }));
       mode = "results";
+      pid = event.hostId;
+      setPerson();
       chosen.clear();
       creation = null;
       toast("邀約已建立！請複製邀請連結給朋友。");
@@ -601,6 +612,10 @@ function bind() {
   );
   on("[data-mode]", "click", (e) => {
     mode = e.currentTarget.dataset.mode;
+    if (admin) {
+      pid = event.hostId;
+      setPerson();
+    }
     render();
   });
   on("#newname", "input", (e) => (newName = e.target.value));
@@ -647,7 +662,7 @@ function bind() {
           "未標記「不行」的時段，送出後會視為可以參加。確定送出全部選項？";
         if (!(await ask(message))) return;
       }
-      if (!edit) {
+      if (!admin && !edit) {
         edit = secret();
         pid = selectedPid || uid();
         storage.set("ft:" + eid, { pid, edit });
@@ -655,9 +670,17 @@ function bind() {
       const outgoing = Object.fromEntries(
         event.slots.map((s) => [s, answers[s] !== false]),
       );
-      event = await rpc("respond", { pid, name, answers: outgoing }, edit);
-      storage.set("ft:" + eid, { pid, edit });
-      history.replaceState(null, "", link({ p: pid, edit }));
+      event = await rpc(
+        admin ? "host_respond" : "respond",
+        { pid, name, answers: outgoing },
+        admin || edit,
+      );
+      rememberIdentity();
+      history.replaceState(
+        null,
+        "",
+        admin ? link({ admin }) : link({ p: pid, edit }),
+      );
       dirty = false;
       mode = "results";
       toast("已送出！你可以隨時回來修改。");
@@ -683,13 +706,39 @@ function bind() {
       );
     }),
   );
+  on("#edit-event", "click", () => {
+    editingEvent = true;
+    addMode = true;
+    chosen = new Set(event.slots);
+    eventEdit = {
+      title: event.title,
+      times: JSON.parse(JSON.stringify(event.times)),
+      base_slots: [...event.slots],
+      base_times: JSON.parse(JSON.stringify(event.times)),
+      base_title: event.title,
+    };
+    render();
+  });
+  on("#edit-title", "input", (e) => (eventEdit.title = e.target.value));
+  on("[data-edit-time]", "input", (e) => {
+    const [t, i] = e.target.dataset.editTime.split(":");
+    eventEdit.times[t][i] = e.target.value;
+  });
+  on("#host-availability", "click", () => {
+    pid = event.hostId;
+    setPerson();
+    mode = "fill";
+    render();
+  });
   on("#add", "click", () => {
+    editingEvent = false;
     addMode = true;
     chosen.clear();
     render();
   });
   on("#cancel-add", "click", () => {
     addMode = false;
+    editingEvent = false;
     chosen.clear();
     render();
   });
@@ -698,10 +747,23 @@ function bind() {
     "click",
     act(async () => {
       if (!chosen.size) throw Error("請選擇要追加的日期。");
-      event = await rpc("append", { slots: [...chosen] }, admin);
+      if (editingEvent) {
+        if (
+          !(await ask(
+            "儲存邀約變更？移除的日期不再列入統計，改動的時段須請朋友重新補答。",
+          ))
+        )
+          return;
+        event = await rpc(
+          "edit_event",
+          { ...eventEdit, slots: [...chosen].sort() },
+          admin,
+        );
+      } else event = await rpc("append", { slots: [...chosen] }, admin);
+      editingEvent = false;
       chosen.clear();
       addMode = false;
-      toast("日期已追加，請分享連結提醒朋友補答。");
+      toast("邀約已更新，請分享連結提醒朋友補答。");
     }),
   );
   on(
@@ -724,7 +786,7 @@ function bind() {
     act(async () => {
       if (
         await ask(
-          "完成統計並存檔？目前的日期、回覆與結果會固定保存，無法再修改。",
+          "結束邀約並存檔？將立即停止收回覆，日期、回覆與結果固定保存，無法再修改。",
         )
       )
         event = await rpc("close", {}, admin);
@@ -766,7 +828,7 @@ function bind() {
           /* Another participant cannot see deleted archives. */
         }
       }
-      toast("已更新這台裝置的邀約紀錄");
+      toast("已更新我的主揪紀錄");
     }),
   );
 }
