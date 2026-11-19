@@ -8,7 +8,8 @@ import {
   highlights,
   candidateScope,
   visibleCandidates,
-} from "./domain.mjs?v=9";
+  replyCompletesRoster,
+} from "./domain.mjs?v=10";
 import {
   dayInfo,
   calendarMetadata,
@@ -350,7 +351,10 @@ function eventPage() {
       locked ? "已存檔 · 唯讀" : "邀約進行中",
     ) +
     invitationScope() +
-    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : "本次邀約已完成統計並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}${event.type === "sport" ? " tee off" : ""}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout event-layout"><aside><div class="card invitation-links"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2><label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="delete-event" class="danger">刪除此存檔</button>' : '<button id="edit-event">編輯邀約</button><button id="host-availability">修改我的時間</button><button id="add">追加日期</button><button id="close">結束並存檔</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${
+    (!locked
+      ? `<p class="notice">${event.rosterKnown ? "名單內所有人（含主揪）完成全部候選時段回覆後，系統會自動結案並固定存檔。" : "本案未預設名單，由主揪手動結案。"}${admin ? " 主揪也可隨時按「結案並存檔」，不必等全員回覆。" : ""}</p>`
+      : "") +
+    `${locked ? `<div class="success"><strong>${event.final ? `已確定：${esc(slotLabel(event.final))}` : event.closedReason === "all_replied" ? "名單全員回覆完成，已自動結案並存檔" : "本次邀約已結案並存檔"}</strong>${event.final ? ` · ${esc(event.times[event.final.split("_")[1]].join("–"))}${event.type === "sport" ? " tee off" : ""}` : ""}<small>統計結果已固定保存，不能再更改回覆或重新開放。${event.archivedAt ? " 存檔：" + esc(new Date(event.archivedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })) : ""}</small></div>` : ""}<div class="layout event-layout"><aside><div class="card invitation-links"><h2>${admin ? "主揪管理" : "一起排個時間"}</h2><label>邀請朋友的連結</label>${copyBox(link(), "邀請連結")}<small>持有連結的人可看見名字與回覆，請只分享給受邀朋友。</small>${admin ? `<details><summary>保留主揪管理連結</summary>${copyBox(link({ admin }), "主揪管理連結")}<small>這個連結可管理邀約，請勿放進群組。</small></details><div class="actions" style="margin-top:20px">${locked ? '<button id="delete-event" class="danger">刪除此存檔</button>' : '<button id="edit-event">編輯邀約</button><button id="host-availability">修改我的時間</button><button id="add">追加日期</button><button id="close">結案並存檔</button>'}</div>` : `${edit && pid ? `<details><summary>我的私人修改連結</summary>${copyBox(link({ p: pid, edit }), "私人修改連結")}<small>請保留此連結，換手機也能修改答案。</small></details>` : ""}`}</div>${
       !admin && !locked
         ? `<div class="card"><div class="step">01 / 你是哪一位</div>${
             own
@@ -662,7 +666,8 @@ function bind() {
       const pending = event.slots.filter(
         (slot) => answers[slot] === undefined,
       ).length;
-      if (unseen || pending) {
+      const autoClosing = replyCompletesRoster(event, pid || selectedPid);
+      if (unseen || pending || autoClosing) {
         const scope = candidateScope(event.slots);
         const message =
           `本次統計共 ${scope.count} 個選項，日期從 ${scopeDate(scope.first)} 至 ${scopeDate(scope.last)}。` +
@@ -670,7 +675,11 @@ function bind() {
             ? `本次還有 ${unseen} 個選項尚未開啟查看，請確認已檢查其他月份與日期。`
             : "") +
           (pending ? `另有 ${pending} 個新增待補答時段。` : "") +
-          "未標記「不行」的時段，送出後會視為可以參加。確定送出全部選項？";
+          "未標記「不行」的時段，送出後會視為可以參加。" +
+          (autoClosing
+            ? "本次送出後名單全員即完成回覆，將自動結案並固定存檔，無法再修改。"
+            : "") +
+          "確定送出全部選項？";
         if (!(await ask(message))) return;
       }
       if (!admin && !edit) {
@@ -694,7 +703,11 @@ function bind() {
       );
       dirty = false;
       mode = "results";
-      toast("已送出！你可以隨時回來修改。");
+      toast(
+        event.status === "open"
+          ? "已送出！結案前可以回來修改。"
+          : "已送出，名單全員回覆完成，本案已自動結案並存檔。",
+      );
     }),
   );
   on(
@@ -800,10 +813,13 @@ function bind() {
     act(async () => {
       if (
         await ask(
-          "結束邀約並存檔？將立即停止收回覆，日期、回覆與結果固定保存，無法再修改。",
+          "結案並存檔？即使尚有人未回覆，也會立即停止收回覆，固定目前結果，無法再修改。",
         )
-      )
+      ) {
         event = await rpc("close", {}, admin);
+        mode = "results";
+        toast("已結案並存檔。");
+      }
     }),
   );
   on(

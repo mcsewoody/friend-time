@@ -47,7 +47,7 @@ function fixture() {
     hostId: "host",
     slots: [slot],
     status: "open",
-    rosterKnown: true,
+    rosterKnown: false,
     people: [
       { id: "host", name: "主揪", submitted: true, answers: { [slot]: true } },
       { id: pid, name: "朋友", submitted: true, answers: { [slot]: true } },
@@ -563,7 +563,7 @@ test("開啟朋友邀約不列入本人主揪紀錄", async (t) => {
 test("主揪可修改自己時間；結束是單一存檔按鈕", async (t) => {
   const doc = fixture();
   const a = await setup(t, { doc, hash: `e=${id}&admin=${key}` });
-  assert.equal(a.w.document.querySelector("#close").textContent, "結束並存檔");
+  assert.equal(a.w.document.querySelector("#close").textContent, "結案並存檔");
   a.click("#host-availability");
   assert.ok(a.w.document.querySelector("#submit"));
   a.click(`[data-slot="${slot}"]`);
@@ -680,4 +680,69 @@ test("會議僅下午2也固定四列，月週曆與統計均顯示正確時間"
     a.w.document.querySelector(".result-row").textContent,
     /下午 2 · 15:30–17:00/,
   );
+});
+
+test("最後回覆送出前提醒自動結案；取消不送出，完成後不顯示可修改訊息", async (t) => {
+  const doc = fixture();
+  doc.rosterKnown = true;
+  doc.people[1].submitted = false;
+  doc.people[1].answers = {};
+  const a = await setup(t, { doc, hash: `e=${id}` });
+  const select = a.w.document.querySelector("#person");
+  select.value = pid;
+  select.dispatchEvent(new a.w.Event("change", { bubbles: true }));
+  a.click("#submit");
+  await flush();
+  assert.match(a.w.document.querySelector("dialog").textContent, /自動結案/);
+  a.click("dialog button");
+  await flush();
+  assert.equal(a.calls.filter((c) => c.p_action === "respond").length, 0);
+  a.click("#submit");
+  await flush();
+  a.setDoc({
+    ...doc,
+    status: "closed",
+    archived: true,
+    archivedAt: "2026-11-19T01:00:00Z",
+    closedReason: "all_replied",
+    people: doc.people.map((p) => ({
+      ...p,
+      submitted: true,
+      answers: { [slot]: true },
+    })),
+  });
+  a.click("dialog .primary");
+  await flush();
+  assert.match(
+    a.w.document.querySelector(".success").textContent,
+    /已自動結案/,
+  );
+  assert.equal(a.w.document.querySelector("#submit"), null);
+  assert.doesNotMatch(
+    a.w.document.querySelector("#toast").textContent,
+    /隨時回來修改/,
+  );
+});
+test("手動結案限主揪，未全員回覆也可結案", async (t) => {
+  const doc = fixture();
+  doc.rosterKnown = true;
+  doc.people[1].submitted = false;
+  const a = await setup(t, { doc, hash: `e=${id}&admin=${key}` });
+  assert.equal(a.w.document.querySelector("#close").textContent, "結案並存檔");
+  a.click("#close");
+  await flush();
+  assert.match(
+    a.w.document.querySelector("dialog").textContent,
+    /尚有人未回覆/,
+  );
+  a.setDoc({
+    ...doc,
+    status: "closed",
+    archived: true,
+    closedReason: "host_closed",
+  });
+  a.click("dialog .primary");
+  await flush();
+  assert.equal(a.calls.at(-1).p_action, "close");
+  assert.equal(a.w.document.querySelector("#close"), null);
 });

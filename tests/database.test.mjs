@@ -29,6 +29,12 @@ await db.exec(
     "utf8",
   ),
 );
+await db.exec(
+  await fs.readFile(
+    new URL("../database/005_auto_close_roster.sql", import.meta.url),
+    "utf8",
+  ),
+);
 const token = () => randomUUID() + randomUUID(),
   admin = token(),
   member = token(),
@@ -55,12 +61,12 @@ test("建立邀約，主揪自動計入；未填名單不計入", async () => {
       host: "主揪",
       type: "meal",
       times: { lunch: ["12:00", "14:00"], dinner: ["18:00", "21:00"] },
-      names: ["朋友"],
+      names: ["朋友", "尚待回覆"],
       slots: [lunch],
     },
     admin,
   );
-  assert.equal(doc.people.length, 2);
+  assert.equal(doc.people.length, 3);
   assert.equal(doc.people[0].answers[lunch], true);
   assert.equal(doc.people[1].submitted, false);
 });
@@ -98,7 +104,7 @@ test("新增參加者與重複名字保護", async () => {
     { pid, name: "新增朋友", answers: { [lunch]: true } },
     member,
   );
-  assert.equal(doc.people.length, 3);
+  assert.equal(doc.people.length, 4);
   await assert.rejects(
     api(
       "respond",
@@ -112,7 +118,7 @@ test("追加日期，原參加者新時段保持未確認", async () => {
   doc = await api("append", { slots: [dinner] }, admin);
   assert.equal(doc.people[0].answers[dinner], true);
   assert.equal(doc.people[1].answers[dinner], undefined);
-  assert.equal(doc.people[2].answers[dinner], undefined);
+  assert.equal(doc.people.find((p) => p.id === pid).answers[dinner], undefined);
 });
 test("過期版本回覆被拒絕，避免新增時段被默認可行", async () =>
   assert.rejects(
@@ -129,7 +135,7 @@ test("修改連結可補答；答案不包含憑證或雜湊", async () => {
     { pid, name: "新增朋友", answers: { [lunch]: true, [dinner]: false } },
     member,
   );
-  assert.equal(doc.people[2].answers[dinner], false);
+  assert.equal(doc.people.find((p) => p.id === pid).answers[dinner], false);
   assert.equal(JSON.stringify(doc).includes(member), false);
   assert.equal("member_keys" in doc, false);
 });
@@ -440,4 +446,164 @@ test("會議拒絕其他主題時段、缺少或錯誤時間；其他主題拒�
     api("create", { ...input, type: "meal" }, token(), randomUUID()),
     /類型/,
   );
+});
+
+test("預設名單全員含補答完成後自動結案，結果與原因固定保存", async () => {
+  const eid = randomUUID(),
+    key = token(),
+    keys = [token(), token()];
+  let d = await api(
+    "create",
+    {
+      title: "全員結案",
+      host: "主揪",
+      type: "meal",
+      times: { lunch: ["12:00", "14:00"], dinner: ["18:00", "21:00"] },
+      names: ["甲", "乙"],
+      slots: [lunch],
+    },
+    key,
+    eid,
+  );
+  const ids = d.people.slice(1).map((p) => p.id);
+  d = await api(
+    "respond",
+    { pid: ids[0], name: "甲", answers: { [lunch]: false } },
+    keys[0],
+    eid,
+  );
+  assert.equal(d.status, "open");
+  d = await api("append", { slots: [dinner] }, key, eid);
+  d = await api(
+    "respond",
+    { pid: ids[1], name: "乙", answers: { [lunch]: true, [dinner]: false } },
+    keys[1],
+    eid,
+  );
+  assert.equal(d.status, "open");
+  assert.equal(d.people[1].answers[dinner], undefined);
+  d = await api(
+    "respond",
+    { pid: ids[0], name: "甲", answers: { [lunch]: false, [dinner]: false } },
+    keys[0],
+    eid,
+  );
+  assert.equal(d.status, "closed");
+  assert.equal(d.closedReason, "all_replied");
+  assert.equal(d.archived, true);
+  assert.ok(d.archivedAt);
+  assert.equal(d.final, null);
+  const snapshot = await api("get", {}, "", eid);
+  assert.deepEqual(snapshot.people, d.people);
+  await assert.rejects(
+    api(
+      "respond",
+      { pid: ids[0], name: "甲", answers: { [lunch]: true, [dinner]: true } },
+      keys[0],
+      eid,
+    ),
+    /已關閉/,
+  );
+  await assert.rejects(api("append", { slots: [lunch] }, key, eid), /無法修改/);
+  await assert.rejects(api("reopen", {}, key, eid), /固定存檔/);
+});
+test("沒有預設名單不自動結案；主揪可自行提前結案且其他人不可結案", async () => {
+  const eid = randomUUID(),
+    key = token(),
+    friend = token();
+  let d = await api(
+    "create",
+    {
+      title: "開放邀約",
+      host: "主揪",
+      type: "class",
+      times: { day: ["09:00", "17:00"] },
+      names: [],
+      slots: [date + "_day"],
+    },
+    key,
+    eid,
+  );
+  d = await api(
+    "respond",
+    { pid: randomUUID(), name: "朋友", answers: { [date + "_day"]: true } },
+    friend,
+    eid,
+  );
+  assert.equal(d.status, "open");
+  await assert.rejects(api("close", {}, friend, eid), /管理連結/);
+  d = await api("close", {}, key, eid);
+  assert.equal(d.closedReason, "host_closed");
+  assert.equal(d.status, "closed");
+  const eid2 = randomUUID(),
+    key2 = token();
+  d = await api(
+    "create",
+    {
+      title: "提前結案",
+      host: "主揪",
+      type: "class",
+      times: { day: ["09:00", "17:00"] },
+      names: ["還沒回覆"],
+      slots: [date + "_day"],
+    },
+    key2,
+    eid2,
+  );
+  d = await api("close", {}, key2, eid2);
+  assert.equal(d.people[1].submitted, false);
+  assert.equal(d.status, "closed");
+  assert.equal(d.closedReason, "host_closed");
+});
+test("時段改動使舊回覆失效，所有人補齊才自動結案", async () => {
+  const eid = randomUUID(),
+    key = token(),
+    keys = [token(), token()];
+  let d = await api(
+    "create",
+    {
+      title: "改時段",
+      host: "主揪",
+      type: "class",
+      times: { day: ["09:00", "17:00"] },
+      names: ["甲", "乙"],
+      slots: [date + "_day"],
+    },
+    key,
+    eid,
+  );
+  const [a, b] = d.people.slice(1).map((p) => p.id);
+  d = await api(
+    "respond",
+    { pid: a, name: "甲", answers: { [date + "_day"]: true } },
+    keys[0],
+    eid,
+  );
+  d = await api(
+    "edit_event",
+    {
+      base_title: d.title,
+      base_slots: d.slots,
+      base_times: d.times,
+      title: d.title,
+      slots: d.slots,
+      times: { day: ["10:00", "17:00"] },
+    },
+    key,
+    eid,
+  );
+  d = await api(
+    "respond",
+    { pid: b, name: "乙", answers: { [date + "_day"]: true } },
+    keys[1],
+    eid,
+  );
+  assert.equal(d.status, "open");
+  d = await api(
+    "respond",
+    { pid: a, name: "甲", answers: { [date + "_day"]: true } },
+    keys[0],
+    eid,
+  );
+  assert.equal(d.closedReason, "all_replied");
 });

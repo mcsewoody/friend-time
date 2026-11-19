@@ -100,3 +100,17 @@ export function visibleCandidates(slots, cursor, view) {
     return date >= dateKey(start) && date <= dateKey(end);
   });
 }
+
+// Each successful reply contains every current slot; other people must also be complete.
+export function replyCompletesRoster(event, personId) {
+  return (
+    event.rosterKnown === true &&
+    event.people.length > 1 &&
+    event.people.every(
+      (p) =>
+        p.id === personId ||
+        (p.submitted &&
+          event.slots.every((s) => typeof p.answers[s] === "boolean")),
+    )
+  );
+}

@@ -115,3 +115,41 @@ test("會議四時段按上午1、上午2、下午1、下午2排序，交集不�
   assert.equal(slotLabel(slots[0]), "2026-12-01 下午 2");
   assert.equal(TYPES.am1, "上午 1");
 });
+
+test("全員完成預判含主揪與每個時段，不把未送出或補答當完成", async () => {
+  const { replyCompletesRoster } = await import("../docs/domain.mjs");
+  const e = {
+    rosterKnown: true,
+    slots: ["a", "b"],
+    people: [
+      { id: "host", submitted: true, answers: { a: true, b: false } },
+      { id: "friend", submitted: false, answers: {} },
+    ],
+  };
+  assert.equal(replyCompletesRoster(e, "friend"), true);
+  assert.equal(replyCompletesRoster(e, "host"), false);
+  assert.equal(
+    replyCompletesRoster({ ...e, rosterKnown: false }, "friend"),
+    false,
+  );
+  assert.equal(
+    replyCompletesRoster(
+      { ...e, people: [{ id: "host", submitted: true, answers: { a: true } }] },
+      "host",
+    ),
+    false,
+  );
+  assert.equal(
+    replyCompletesRoster(
+      {
+        ...e,
+        people: [
+          { id: "host", submitted: true, answers: { a: true } },
+          e.people[1],
+        ],
+      },
+      "friend",
+    ),
+    false,
+  );
+});
