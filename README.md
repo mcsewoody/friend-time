@@ -1,3 +1,7 @@
+# 有空一起（已併入 COMART 平台）
+
+> 2026-11-19 起併入 COMART 平台的「約會」：https://platform.comart.com.tw/woody/dates/ 。本 repo 只剩轉址頁（`docs/index.html`），舊連結會帶著 `#` 後面的內容轉過去。程式與資料庫 migration 保留在 Git 歷史（v10 = commit 8769640）。
+
 # 有空一起 · 朋友約時間
 
 免登入的聚餐／上課／打球／會議時間協調工具。主揪圈選候選時間，朋友各自排除不能參加的時段，以月曆或週曆查看交集。

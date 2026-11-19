@@ -1,29 +1,28 @@
 <!doctype html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="referrer" content="no-referrer" />
-    <meta name="theme-color" content="#234d42" />
-    <title>有空一起 · 朋友約時間</title>
-    <link rel="stylesheet" href="style.css?v=10" />
-  </head>
-  <body>
-    <header>
-      <a class="brand" href="./"
-        ><span class="brand-icon">日</span> 有空一起<span class="brand-en"
-          >TIME TOGETHER</span
-        ></a
-      >
-      <nav>
-        <a class="button-link" href="./">＋ 發起新邀約</a
-        ><span class="timezone">台灣時間 UTC+8</span>
-      </nav>
-    </header>
-    <main id="app"><p>正在載入…</p></main>
-    <footer>把時間留給見面。<span>有空一起 · 朋友約時間</span></footer>
-    <div id="toast" role="status" aria-live="polite"></div>
-    <script src="config.js?v=3"></script>
-    <script type="module" src="app.js?v=10"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>有空一起 · 已搬家</title>
+<style>body{font-family:-apple-system,"PingFang TC",sans-serif;background:#f6f3ec;color:#234d42;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px;text-align:center}a{color:#234d42}</style>
+</head>
+<body>
+<div><h1>「有空一起」已搬到新網址</h1><p>正在帶你過去…如果沒有自動跳轉，<a id="go" href="https://platform.comart.com.tw/woody/dates/">請點這裡</a>。</p></div>
+<script>
+// 2026-11-19：搬到 COMART 平台。#後面的邀請／修改連結內容原樣帶過去；
+// 這台瀏覽器記住的「朋友身分」（只限這一筆邀約、不含主揪憑證）用 ftimport 一起帶過去，換網址後仍能修改自己的回覆。
+(function () {
+  var NEW = "https://platform.comart.com.tw/woody/dates/";
+  var h = new URLSearchParams(location.hash.slice(1)), e = h.get("e");
+  try {
+    var v = e && JSON.parse(localStorage.getItem("ft:" + e) || "null");
+    if (v && v.pid && v.edit && !h.get("admin")) h.set("ftimport", btoa(unescape(encodeURIComponent(JSON.stringify({ pid: v.pid, edit: v.edit })))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
+  } catch (x) {}
+  var url = NEW + (String(h) ? "#" + h : "");
+  document.getElementById("go").href = url;
+  location.replace(url);
+})();
+</script>
+</body>
 </html>
